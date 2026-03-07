@@ -1632,8 +1632,8 @@ Types: "duty", "appointment", "laundry", "warning", "free"`
     </div></div>`
 
     const data = await _claudeAPI({
-      model: 'claude-opus-4-5',
-      max_tokens: 1200,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }]
     })
 
