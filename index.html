@@ -220,7 +220,7 @@ body {
 .task-card.done .task-checkbox { background: var(--sage); border-color: var(--sage); }
 .task-checkbox svg { display: none; }
 .task-card.done .task-checkbox svg { display: block; }
-.task-body { flex: 1; }
+.task-body { flex: 1; min-width: 0; word-break: break-word; }
 .task-name { font-size: 0.88rem; font-weight: 500; line-height: 1.4; }
 .task-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 .badge {
@@ -1954,6 +1954,10 @@ function renderEventCard(ev, all, rerender, compact) {
 
   const card = document.createElement('div')
   card.className = `task-card ${stripeClass}`
+  card.style.overflow = 'hidden'
+  card.style.minWidth = '0'
+  card.style.boxSizing = 'border-box'
+  card.style.width = '100%'
   if (compact) card.style.opacity = '0.7'
   if (isExpanded) card.style.borderColor = col
 
@@ -1987,27 +1991,31 @@ function renderEventCard(ev, all, rerender, compact) {
   if (isExpanded) {
     const exp = document.createElement('div')
     exp.style.cssText = `border-top:1.5px solid ${border};margin-top:10px;padding-top:10px`
+    exp.style.overflow = 'hidden'
+    exp.style.minWidth = '0'
+    exp.style.width = '100%'
+    exp.style.boxSizing = 'border-box'
 
     // Edit / status buttons
     const actRow = document.createElement('div')
-    actRow.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap'
+    actRow.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;width:100%;box-sizing:border-box'
     ;[['✎ Edit','#showEventEditForm'],['✓ Complete','#markDone'],['🗑','#deleteEvt']].forEach(([lbl])=>{})
 
     const editBtn = document.createElement('button')
     editBtn.className = 'badge quick'
-    editBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    editBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap'
     editBtn.textContent = '✎ Edit details'
     editBtn.onclick = e => { e.stopPropagation(); showEventForm(card.closest('.duties-body')||document.getElementById('adoptions-root'), all, ev.type, rerender, ev) }
 
     const doneBtn = document.createElement('button')
     doneBtn.className = 'badge delegate'
-    doneBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    doneBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap'
     doneBtn.textContent = ev.status==='completed' ? '↩ Reopen' : '✓ Mark complete'
     doneBtn.onclick = e => { e.stopPropagation(); _updateEvtStatus(ev.id, ev.status==='completed'?'scheduled':'completed', all, rerender) }
 
     const delBtn = document.createElement('button')
     delBtn.className = 'badge solo'
-    delBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    delBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap'
     delBtn.textContent = '🗑 Remove'
     delBtn.onclick = e => { e.stopPropagation(); if(confirm(`Remove ${ev.adopterName}?`)){const evts=loadEvents().filter(x=>x.id!==ev.id);saveEvents(evts);rerender()} }
     actRow.append(editBtn, doneBtn, delBtn)
@@ -3139,14 +3147,13 @@ function showMedScan() {
     reader.onload = function() {
       var b64 = reader.result.split(',')[1]
       _claudeAPI({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 2000,
           messages: [{role:'user', content:[
             {type:'image', source:{type:'base64', media_type:file.type, data:b64}},
             {type:'text', text:'This is a cat shelter med whiteboard or med sheet. Extract all cat names, medications, doses, units, times (AM/PM), and any dates or notes visible. Return ONLY valid JSON, no explanation:\n{"cats":[{"name":"CatName","room":"Room X","notes":"any notes","meds":[{"name":"MedName","dose":"50","unit":"mg","times":["AM"],"notes":"with food","startDate":"","endDate":""}]}]}\nIf a field is not visible, use empty string. times must be array of "AM" and/or "PM". Do not include markdown.'}
           ]}]
         })
-      .then(function(r) { return r.json() })
       .then(function(data) {
         var raw = (data.content || []).find(function(b) { return b.type === 'text' }) || {}
         var text = (raw.text || '').replace(/```json|```/g,'').trim()
