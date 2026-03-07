@@ -2171,7 +2171,7 @@ function showScanSheet(){
   sheet.appendChild(_el('div',{style:{fontSize:11,color:'#b0a898',textAlign:'center',marginBottom:18,lineHeight:1.6}},
     'Take a photo of your printed sheet.\nClaude will read which boxes are checked\nand offer to sync them back to the app.'))
   const statusDiv=_el('div',{style:{minHeight:40,marginBottom:12,textAlign:'center',fontSize:12.5,color:'#7a6e65',padding:'8px',borderRadius:8}})
-  const fileInput=_el('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'}})
+  const fileInput=_el('input',{type:'file',accept:'image/*',style:{display:'none'}})
   fileInput.addEventListener('change',async()=>{
     const file=fileInput.files[0];if(!file)return
     statusDiv.textContent='📤 Analyzing...';statusDiv.style.background='#fdf7e8';statusDiv.style.color='#c98a2a'
@@ -2666,7 +2666,7 @@ function showMedScan() {
   sheet.appendChild(previewArea)
 
   var fileInput = document.createElement('input')
-  fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.capture = 'environment'
+  fileInput.type = 'file'; fileInput.accept = 'image/*'
   fileInput.style.display = 'none'
   fileInput.addEventListener('change', function() {
     var file = fileInput.files[0]; if (!file) return
