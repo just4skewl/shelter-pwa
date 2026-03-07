@@ -481,7 +481,7 @@ body {
       <div style="margin-top:10px;background:var(--parchment);border:1.5px solid var(--sand-light);border-radius:12px;padding:12px 14px;" id="notes-area-wrap">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <span style="font-size:11.5px;font-weight:700;color:var(--mid);letter-spacing:0.05em;text-transform:uppercase;">📌 Today's Notes &amp; Reminders</span>
-          <button onclick="showAddNote()" style="background:transparent;border:1.5px solid var(--sand-dark);border-radius:7px;padding:3px 10px;font-size:11px;color:var(--mid);cursor:pointer;font-family:inherit;font-weight:600;">+ Note</button>
+          <div style="display:flex;gap:5px;"><button onclick="showAddNote()" style="background:transparent;border:1.5px solid var(--sand-dark);border-radius:7px;padding:3px 10px;font-size:11px;color:var(--mid);cursor:pointer;font-family:inherit;font-weight:600;">+ Note</button><button onclick="showScanNotes('today')" style="background:transparent;border:1.5px solid var(--sand-dark);border-radius:7px;padding:3px 10px;font-size:11px;color:var(--mid);cursor:pointer;font-family:inherit;font-weight:600;">📷 Scan</button></div>
         </div>
         <div id="notes-list" style="display:flex;flex-direction:column;gap:6px;"></div>
         <div id="notes-empty" style="font-size:12px;color:var(--light);font-style:italic;padding:4px 2px;">No notes yet — tap + Note to add one</div>
@@ -1073,7 +1073,7 @@ function _gsAutoImport(csvText) {
         built.push({
           id: _uid(), type,
           adopterName: name, date: r._date,
-          time: timeCol ? _parseTime(r[timeCol]) : '',
+          time: timeCol ? _formatTime(r[timeCol]) : '',
           cats, notes: noteParts.join(' · '),
           status: 'scheduled', checklist: {}, importedFrom: 'sheets'
         })
@@ -1094,7 +1094,7 @@ function _gsAutoImport(csvText) {
             id: _uid(), type: isReturn ? 'return' : 'move',
             adopterName: catName || 'Unknown',
             date: r._date,
-            time: timeCol ? _parseTime(r[timeCol]) : '',
+            time: timeCol ? _formatTime(r[timeCol]) : '',
             cats: catName ? [catName] : [],
             notes: catMove,
             status: 'scheduled', checklist: {}, importedFrom: 'sheets'
@@ -2262,7 +2262,7 @@ function _parseDate(raw) {
   return ''
 }
 
-function _parseTime(raw) {
+function _formatTime(raw) {
   raw=(raw||'').trim()
   if(!raw) return ''
   // Shorthand: 2p, 11a, 10a
@@ -2404,7 +2404,7 @@ function showCsvImport(container, events, rerender) {
           id:_uid(), type,
           adopterName:name,
           date:r._date,
-          time:timeCol?_parseTime(r[timeCol]):'',
+          time:timeCol?_formatTime(r[timeCol]):'',
           cats,
           notes:noteParts.join(' · '),
           status:'scheduled', checklist:{}, importedFrom:'csv'
@@ -2419,7 +2419,7 @@ function showCsvImport(container, events, rerender) {
         const catName  = catMatch ? catMatch[1] : ''
         // Parse time from note prefix like "2p:" or "Aft:"
         const tPfx     = catMove.match(/^(\d{1,2}[ap]|aft(?:ernoon)?|morn(?:ing)?|am|pm)\s*:/i)
-        const evtTime  = tPfx ? _parseTime(tPfx[1].replace(':','').trim()) : (timeCol?_parseTime(r[timeCol]):'')
+        const evtTime  = tPfx ? _formatTime(tPfx[1].replace(':','').trim()) : (timeCol?_formatTime(r[timeCol]):'')
         built.push({
           id:_uid(),
           type: isReturn?'return':'move',
@@ -2799,7 +2799,7 @@ function renderNotesList(parentEl) {
     const notesListEl = document.createElement('div')
     notesListEl.id = 'notes-list'
     wrap.appendChild(notesListEl)
-    parentEl.appendChild(wrap)
+    if (parentEl) parentEl.appendChild(wrap)
   }
   const notesList = document.getElementById('notes-list')
   if (!notesList) return
@@ -3168,23 +3168,27 @@ function showMedScan() {
   var previewArea = document.createElement('div')
   sheet.appendChild(previewArea)
 
-  var fileInput = document.createElement('input')
-  fileInput.type = 'file'; fileInput.accept = 'image/*'
-  fileInput.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0'
-  document.body.appendChild(fileInput)
-  fileInput.addEventListener('change', function() {
-    var file = fileInput.files[0]; if (!file) { fileInput.remove(); return }
-    statusDiv.textContent = '📤 Reading whiteboard...'; statusDiv.style.background = '#fdf7e8'; statusDiv.style.color = '#c98a2a'
-    previewArea.innerHTML = ''
-    var reader = new FileReader()
-    reader.onload = function() {
-      var b64 = reader.result.split(',')[1]
-      _claudeAPI({
-          model: 'claude-sonnet-4-20250514',
+  // Two separate file inputs — one for camera, one for gallery
+  function makeInput(captureMode) {
+    var fi = document.createElement('input')
+    fi.type = 'file'; fi.accept = 'image/*'
+    if (captureMode) fi.setAttribute('capture', 'environment')
+    fi.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none'
+    document.body.appendChild(fi)
+    fi.addEventListener('change', function() {
+      var file = fi.files[0]; if (!file) { fi.remove(); return }
+      statusDiv.textContent = '📤 Reading whiteboard...'; statusDiv.style.background = '#fdf7e8'; statusDiv.style.color = '#c98a2a'
+      previewArea.innerHTML = ''
+      var reader = new FileReader()
+      reader.onload = function() {
+        var b64 = reader.result.split(',')[1]
+        fi.remove()
+        _claudeAPI({
+            model: 'claude-sonnet-4-6',
           max_tokens: 2000,
           messages: [{role:'user', content:[
             {type:'image', source:{type:'base64', media_type:file.type, data:b64}},
-            {type:'text', text:'You are reading a cat shelter medication board or sheet. Extract every cat and all their medications carefully.\n\nRules:\n- Cat names: use exactly as written (e.g. "Luna", "Mr. Biscuit")\n- Room: look for "Room 1", "Rm 2", "R3", cage numbers, or section labels\n- Med name: full medication name (e.g. "Doxycycline", "Terramycin Eye Ointment", "Pyrantel Dewormer")\n- dose: numeric value only (e.g. "50", "1", "0.5") — no units in this field\n- unit: e.g. "mg", "ml", "drop(s)", "tab(s)", "tsp"\n- times: array containing "AM" and/or "PM" based on schedule shown\n- notes: any instructions like "give with food", "apply to both eyes", "mix into wet food"\n- startDate / endDate: ISO date if visible (YYYY-MM-DD), else empty string\n\nReturn ONLY valid JSON, no explanation, no markdown:\n{"cats":[{"name":"CatName","room":"Room 2","notes":"shy — approach gently","meds":[{"name":"Doxycycline","dose":"50","unit":"mg","times":["AM"],"notes":"give with food","startDate":"","endDate":""}]}]}\n\nIf a field is not visible leave it as empty string. times must always be an array.'}
+            {type:'text', text:'You are reading a cat shelter medication document. This could be either:\n\n(A) A WHITEBOARD or LIST — multiple cats listed with their meds\n(B) A MED CARD — a single structured card for one cat, with labeled fields like ID/Name, M/C#, Color, Room#, Medication, Dosage, AM/PM/Both, Information, Start, Stop, and a date-tracking grid\n\nFor EITHER format, extract all cats and their medications using these rules:\n- Cat name: use the Name or ID/Name field, exactly as written\n- Room: use Room# field or any room/cage label. Information field may have cage info like VR1 — include in notes\n- Med name: full medication name (e.g. Doxycycline, Fluoxetine, Strongid)\n- dose: numeric value only (e.g. 0.45, 50, 1) — no units in this field\n- unit: e.g. mg, mL, drop(s), tab(s), tsp\n- times: array of AM and/or PM. Both → [\"AM\",\"PM\"]. AM only → [\"AM\"]. PM only → [\"PM\"].\n- notes: any instructions, color description, or special info (e.g. give with food, Black smaller cat, VR1)\n- startDate / endDate: parse to ISO YYYY-MM-DD. Today is 2026-03-07. 3/16 → 2026-03-16. forever or blank → empty string\n- If two cats share a line (e.g. Jett & Legato), create a separate entry for each\n\nReturn ONLY valid JSON, no explanation, no markdown:\n{\"cats\":[{\"name\":\"Hannah\",\"room\":\"\",\"notes\":\"Black smaller cat — VR1\",\"meds\":[{\"name\":\"Doxycycline\",\"dose\":\"0.45\",\"unit\":\"mL\",\"times\":[\"AM\"],\"notes\":\"\",\"startDate\":\"2026-03-13\",\"endDate\":\"2026-03-16\"}]}]}\n\nIf a field is not visible leave it as empty string. times must always be an array.'}
           ]}]
         })
       .then(function(data) {
@@ -3213,22 +3217,30 @@ function showMedScan() {
     }
     reader.readAsDataURL(file)
   })
-  sheet.appendChild(fileInput)
+  return fi
+  }
 
-  var photoBtn = document.createElement('button')
-  photoBtn.style.cssText = 'width:100%;background:#3a3530;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;'
-  photoBtn.textContent = '📷  Take Photo / Choose Image'
-  photoBtn.onclick = function() { fileInput.click() }
-  sheet.appendChild(photoBtn)
+  // Two action buttons — camera and gallery
+  var cameraBtn = document.createElement('button')
+  cameraBtn.style.cssText = 'width:100%;background:#3a3530;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;'
+  cameraBtn.textContent = '📷  Take Photo'
+  cameraBtn.onclick = function() { makeInput(true).click() }
+  sheet.appendChild(cameraBtn)
+
+  var galleryBtn = document.createElement('button')
+  galleryBtn.style.cssText = 'width:100%;background:white;color:#3a3530;border:1.5px solid #3a3530;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;'
+  galleryBtn.textContent = '🖼  Choose from Gallery'
+  galleryBtn.onclick = function() { makeInput(false).click() }
+  sheet.appendChild(galleryBtn)
 
   var cancelBtn = document.createElement('button')
   cancelBtn.style.cssText = 'width:100%;background:transparent;border:1.5px solid #e8ddd0;color:#b0a898;border-radius:10px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;'
   cancelBtn.textContent = 'Cancel'
-  cancelBtn.onclick = function() { fileInput.remove(); overlay.remove() }
+  cancelBtn.onclick = function() { overlay.remove() }
   sheet.appendChild(cancelBtn)
 
   overlay.appendChild(sheet)
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) { fileInput.remove(); overlay.remove() } })
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) { overlay.remove() } })
   document.body.appendChild(overlay)
 }
 
@@ -3513,6 +3525,12 @@ function renderShadowNotesList() {
   const list = document.getElementById('shadow-notes-list')
   if (!list) return
   list.innerHTML = ''
+  // Update count label if visible
+  const countLabel = document.getElementById('shadow-notes-count-label')
+  if (countLabel) {
+    const n = loadShadowNotes().length
+    countLabel.textContent = n ? `${n} observation note${n !== 1 ? 's' : ''}` : 'Observation Notes'
+  }
   const notes = loadShadowNotes()
   if (!notes.length) {
     const empty = _el('div', { className: 'task-card' })
@@ -3762,16 +3780,24 @@ function renderShadowNotesTab(body, accentColor) {
   addBtn.innerHTML = '<span style="font-size:15px">+</span> Add Note'
   addBtn.onclick = () => showAddShadowNoteForm(notesContainer)
 
+  const scanShadowBtn = _el('button', { style: { background: 'white', color: '#5a7a9a', border: '1.5px solid #a8c0d8', borderRadius: '10px', padding: '9px 14px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px' } })
+  scanShadowBtn.innerHTML = '<span>📷</span> Scan Notes'
+  scanShadowBtn.onclick = () => showScanNotes('shadow')
+
   const aiBtn = _el('button', { id: 'shadow-ai-btn', style: { background: 'white', color: '#7a5090', border: '1.5px solid #c8aae0', borderRadius: '10px', padding: '9px 14px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', marginLeft: 'auto' } })
   aiBtn.innerHTML = '<span>✨</span> Summarize with AI'
   aiBtn.onclick = () => showShadowAISummary(aiBtn)
 
-  topBar.appendChild(addBtn); topBar.appendChild(aiBtn)
+  const recordBtn = _el('button', { id: 'shadow-record-btn', style: { background: 'white', color: '#c05050', border: '1.5px solid #e8b0b0', borderRadius: '10px', padding: '9px 14px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px' } })
+  recordBtn.innerHTML = '<span>🎙</span> Record'
+  recordBtn.onclick = () => showVoiceRecorder()
+
+  topBar.appendChild(addBtn); topBar.appendChild(scanShadowBtn); topBar.appendChild(recordBtn); topBar.appendChild(aiBtn)
   body.appendChild(topBar)
 
   // ── Notes count label ──────────────────────────────────────
   const notes = loadShadowNotes()
-  const sl = _el('div', { className: 'section-label blue' })
+  const sl = _el('div', { id: 'shadow-notes-count-label', className: 'section-label blue' })
   sl.textContent = notes.length ? `${notes.length} observation note${notes.length !== 1 ? 's' : ''}` : 'Observation Notes'
   body.appendChild(sl)
 
@@ -3796,6 +3822,597 @@ function renderShadowNotesTab(body, accentColor) {
   })
   legend.appendChild(legendGrid)
   body.appendChild(legend)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCAN NOTES — scan handwritten or typed notes → import to app
+// mode: 'today' (quick notes) | 'shadow' (adoption observation)
+// ═══════════════════════════════════════════════════════════════
+function showScanNotes(mode) {
+  var existing = document.getElementById('scan-notes-overlay')
+  if (existing) { existing.remove(); return }
+
+  var isShadow = mode === 'shadow'
+  var accentColor = isShadow ? '#5a7a9a' : 'var(--sage)'
+  var accentHex   = isShadow ? '#5a7a9a' : '#6a9170'
+  var borderColor = isShadow ? '#a8c0d8' : 'var(--sage-light)'
+
+  var overlay = document.createElement('div')
+  overlay.id = 'scan-notes-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9500;display:flex;align-items:flex-end;'
+
+  var sheet = document.createElement('div')
+  sheet.style.cssText = 'background:white;border-radius:18px 18px 0 0;width:100%;padding:20px 18px 44px;max-height:88vh;overflow-y:auto;'
+
+  // Handle
+  var handle = document.createElement('div')
+  handle.style.cssText = 'width:36px;height:4px;background:#e8ddd0;border-radius:999px;margin:0 auto 16px;'
+  sheet.appendChild(handle)
+
+  // Title
+  var title = document.createElement('div')
+  title.style.cssText = 'font-weight:800;font-size:15px;margin-bottom:4px;text-align:center;color:#3a2e28;'
+  title.textContent = '📷 Scan Notes'
+  sheet.appendChild(title)
+
+  var sub = document.createElement('div')
+  sub.style.cssText = 'font-size:11.5px;color:#b0a898;text-align:center;margin-bottom:18px;line-height:1.6;'
+  sub.textContent = isShadow ? 'Photo or screenshot of your adoption notes. Claude will extract each note and suggest a category.' : 'Photo or screenshot of handwritten or typed notes. Claude will extract each item to add to your quick notes.'
+    sheet.appendChild(sub)
+
+  // Status
+  var statusDiv = document.createElement('div')
+  statusDiv.style.cssText = 'min-height:36px;margin-bottom:12px;text-align:center;font-size:12.5px;color:#7a6e65;padding:8px;border-radius:8px;'
+  sheet.appendChild(statusDiv)
+
+  // Preview area
+  var previewArea = document.createElement('div')
+  sheet.appendChild(previewArea)
+
+  // Image processing function shared by both inputs
+  function processFile(file) {
+    if (!file) return
+    statusDiv.textContent = '📤 Reading notes...'; statusDiv.style.background = '#fdf7e8'; statusDiv.style.color = '#c98a2a'
+    previewArea.innerHTML = ''
+    var reader = new FileReader()
+    reader.onload = function() {
+      var b64 = reader.result.split(',')[1]
+      var systemPrompt = isShadow
+        ? 'You are reading notes taken by a shelter worker who was shadowing an adoption counselor. Extract every distinct note, observation, question, or process step. For each item, suggest the best category from: question, process, paperwork, redflag, goodtoknow, followup. Return ONLY valid JSON: {"notes":[{"text":"exact note text","tag":"category"}]}. No markdown, no explanation.'
+        : 'You are reading quick notes or reminders written by a shelter worker. Extract each distinct note or reminder as a separate item. Mark urgent:true if the note contains words like urgent, important, ASAP, today, or has exclamation marks. Return ONLY valid JSON: {"notes":[{"text":"note text","urgent":false}]}. No markdown, no explanation.'
+
+      _claudeAPI({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{role:'user', content:[
+          {type:'image', source:{type:'base64', media_type: file.type, data: b64}},
+          {type:'text', text: systemPrompt}
+        ]}]
+      })
+      .then(function(data) {
+        var raw = ((data.content||[]).find(function(b){return b.type==='text'})||{}).text || '{}'
+        var result
+        try { result = JSON.parse(raw.replace(/```json|```/g,'').trim()) } catch(e) {
+          statusDiv.style.background = '#fdf3ef'; statusDiv.style.color = '#c97b5a'
+          statusDiv.textContent = 'Could not read notes. Try a clearer photo.'
+          return
+        }
+        var notes = result.notes || []
+        if (!notes.length) {
+          statusDiv.style.background = '#fdf3ef'; statusDiv.style.color = '#c97b5a'
+          statusDiv.textContent = 'No notes found. Try a clearer photo.'
+          return
+        }
+        statusDiv.style.background = '#edf5ef'; statusDiv.style.color = '#4e7256'
+        statusDiv.textContent = '✅ Found ' + notes.length + ' note' + (notes.length!==1?'s':'') + ' — review and import below'
+        renderScanNotesPreview(previewArea, notes, sheet, overlay, mode, accentHex, borderColor)
+      })
+      .catch(function(err) {
+        statusDiv.style.background = '#fdf3ef'; statusDiv.style.color = '#c97b5a'
+        statusDiv.textContent = 'Error: ' + err.message
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Camera button
+  var cameraBtn = document.createElement('button')
+  cameraBtn.style.cssText = 'width:100%;background:#3a3530;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;'
+  cameraBtn.textContent = '📷  Take Photo'
+  cameraBtn.onclick = function() {
+    var fi = document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.setAttribute('capture','environment')
+    fi.style.cssText='position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none'
+    document.body.appendChild(fi)
+    fi.addEventListener('change', function() { processFile(fi.files[0]); fi.remove() })
+    fi.click()
+  }
+  sheet.appendChild(cameraBtn)
+
+  // Gallery button
+  var galleryBtn = document.createElement('button')
+  galleryBtn.style.cssText = 'width:100%;background:white;color:#3a3530;border:1.5px solid #3a3530;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;'
+  galleryBtn.textContent = '🖼  Choose from Gallery'
+  galleryBtn.onclick = function() {
+    var fi = document.createElement('input'); fi.type='file'; fi.accept='image/*'
+    fi.style.cssText='position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none'
+    document.body.appendChild(fi)
+    fi.addEventListener('change', function() { processFile(fi.files[0]); fi.remove() })
+    fi.click()
+  }
+  sheet.appendChild(galleryBtn)
+
+  var cancelBtn = document.createElement('button')
+  cancelBtn.style.cssText = 'width:100%;background:transparent;border:1.5px solid #e8ddd0;color:#b0a898;border-radius:10px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;'
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.onclick = function() { overlay.remove() }
+  sheet.appendChild(cancelBtn)
+
+  overlay.appendChild(sheet)
+  overlay.addEventListener('click', function(e) { if (e.target===overlay) overlay.remove() })
+  document.body.appendChild(overlay)
+}
+
+function renderScanNotesPreview(container, notes, sheet, overlay, mode, accentHex, borderColor) {
+  var isShadow = mode === 'shadow'
+  container.innerHTML = ''
+
+  var heading = document.createElement('div')
+  heading.style.cssText = 'font-weight:800;font-size:12.5px;color:'+accentHex+';margin-bottom:10px;padding-top:4px;'
+  heading.textContent = 'Review extracted notes:'
+  container.appendChild(heading)
+
+  // Editable note items
+  var itemsWrap = document.createElement('div')
+  itemsWrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:14px;'
+
+  var noteItems = notes.map(function(n, i) {
+    var item = document.createElement('div')
+    item.style.cssText = 'background:white;border:1.5px solid '+borderColor+';border-radius:10px;padding:10px 12px;position:relative;'
+
+    if (isShadow) {
+      // Tag selector
+      var tagRow = document.createElement('div')
+      tagRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px;'
+      var selectedTag = { value: n.tag || 'goodtoknow' }
+      var tagBtns = {}
+      SHADOW_TAGS.forEach(function(t) {
+        var btn = document.createElement('button')
+        btn.style.cssText = 'border:1.5px solid '+t.color+'55;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:'+t.bg+';color:'+t.color+';'
+        btn.textContent = t.label
+        if (t.id === selectedTag.value) { btn.style.outline = '2px solid '+t.color; btn.style.fontWeight='800' }
+        btn.onclick = function() {
+          selectedTag.value = t.id
+          Object.entries(tagBtns).forEach(function(pair) {
+            var ti = getShadowTagInfo(pair[0])
+            pair[1].style.outline = pair[0]===selectedTag.value ? '2px solid '+ti.color : 'none'
+            pair[1].style.fontWeight = pair[0]===selectedTag.value ? '800' : '600'
+          })
+        }
+        tagBtns[t.id] = btn
+        tagRow.appendChild(btn)
+      })
+      item.appendChild(tagRow)
+      item._getTag = function() { return selectedTag.value }
+    } else {
+      // Urgent checkbox
+      var urgRow = document.createElement('label')
+      urgRow.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mid);margin-bottom:6px;cursor:pointer;'
+      var urg = document.createElement('input'); urg.type='checkbox'; urg.checked = !!n.urgent; urg.style.cursor='pointer'
+      urgRow.appendChild(urg)
+      urgRow.appendChild(document.createTextNode('🔴 Mark as urgent'))
+      item.appendChild(urgRow)
+      item._getUrgent = function() { return urg.checked }
+    }
+
+    // Text area
+    var ta = document.createElement('textarea'); ta.rows=2
+    ta.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid #e8ddd0;border-radius:7px;font-size:12.5px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none;line-height:1.5;'
+    ta.value = n.text
+    item.appendChild(ta)
+    item._getText = function() { return ta.value.trim() }
+
+    // Delete button
+    var del = document.createElement('button')
+    del.style.cssText = 'position:absolute;top:6px;right:8px;background:transparent;border:none;font-size:16px;color:var(--light);cursor:pointer;line-height:1;padding:2px 4px;'
+    del.textContent = '×'
+    del.onclick = function() { item.remove() }
+    item.appendChild(del)
+
+    itemsWrap.appendChild(item)
+    return item
+  })
+  container.appendChild(itemsWrap)
+
+  // Import button
+  var importBtn = document.createElement('button')
+  importBtn.style.cssText = 'width:100%;background:'+accentHex+';color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;'
+  importBtn.textContent = '✅ Import All Notes'
+  importBtn.onclick = function() {
+    var added = 0
+    var now = new Date()
+    var allItems = itemsWrap.querySelectorAll('div[style]')
+
+    if (isShadow) {
+      var arr = loadShadowNotes()
+      itemsWrap.querySelectorAll('textarea').forEach(function(ta, i) {
+        var text = ta.value.trim(); if (!text) return
+        var item = noteItems[i]
+        arr.unshift({ id:'sn'+Date.now()+i, text:text, tag: item._getTag ? item._getTag() : 'goodtoknow',
+          date: todayDateStr(), time: now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) })
+        added++
+      })
+      saveShadowNotes(arr)
+      renderShadowNotesList()
+    } else {
+      var existing = loadNotes()
+      itemsWrap.querySelectorAll('textarea').forEach(function(ta, i) {
+        var text = ta.value.trim(); if (!text) return
+        var item = noteItems[i]
+        existing.push({ text:text, urgent: item._getUrgent ? item._getUrgent() : false,
+          ts: Date.now() + i })
+        added++
+      })
+      saveNotes(existing)
+      renderNotesList()
+    }
+    overlay.remove()
+    if (added) {
+      var toast = document.createElement('div')
+      toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#3a3530;color:white;padding:9px 18px;border-radius:20px;font-size:12.5px;font-weight:700;z-index:9999;pointer-events:none;'
+      toast.textContent = '✅ ' + added + ' note' + (added!==1?'s':'') + ' added'
+      document.body.appendChild(toast)
+      setTimeout(function() { toast.remove() }, 2200)
+    }
+  }
+  container.appendChild(importBtn)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VOICE RECORDER — live transcription → AI summary → shadow notes
+// Uses Web Speech API (free, built into browser/iOS Safari/Chrome)
+// ═══════════════════════════════════════════════════════════════
+
+function showVoiceRecorder() {
+  var existing = document.getElementById('voice-recorder-overlay')
+  if (existing) { existing.remove(); return }
+
+  // Check browser support
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    var toast = document.createElement('div')
+    toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#c05050;color:white;padding:10px 18px;border-radius:20px;font-size:12.5px;font-weight:700;z-index:9999;max-width:80%;text-align:center;'
+    toast.textContent = '⚠ Live transcription not supported in this browser. Try Safari or Chrome.'
+    document.body.appendChild(toast)
+    setTimeout(function() { toast.remove() }, 4000)
+    return
+  }
+
+  var overlay = document.createElement('div')
+  overlay.id = 'voice-recorder-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9500;display:flex;align-items:flex-end;'
+
+  var sheet = document.createElement('div')
+  sheet.style.cssText = 'background:white;border-radius:18px 18px 0 0;width:100%;padding:20px 18px 44px;max-height:88vh;overflow-y:auto;'
+
+  // Handle bar
+  var handle = document.createElement('div')
+  handle.style.cssText = 'width:36px;height:4px;background:#e8ddd0;border-radius:999px;margin:0 auto 16px;'
+  sheet.appendChild(handle)
+
+  // Title
+  var title = document.createElement('div')
+  title.style.cssText = 'font-weight:800;font-size:15px;margin-bottom:4px;text-align:center;color:#3a2e28;'
+  title.textContent = '🎙 Record Adoption Session'
+  sheet.appendChild(title)
+
+  var sub = document.createElement('div')
+  sub.style.cssText = 'font-size:11.5px;color:#b0a898;text-align:center;margin-bottom:20px;line-height:1.6;'
+  sub.textContent = 'Tap Record, then speak. Claude will summarize your transcript and suggest notes to save.'
+  sheet.appendChild(sub)
+
+  // ── Status / timer row ─────────────────────────────────────
+  var statusRow = document.createElement('div')
+  statusRow.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;'
+
+  var dot = document.createElement('div')
+  dot.id = 'rec-dot'
+  dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#e0d8d0;transition:background .3s;'
+
+  var timerEl = document.createElement('span')
+  timerEl.id = 'rec-timer'
+  timerEl.style.cssText = 'font-size:14px;font-weight:700;color:var(--mid);font-variant-numeric:tabular-nums;'
+  timerEl.textContent = '0:00'
+
+  var statusLabel = document.createElement('span')
+  statusLabel.id = 'rec-status'
+  statusLabel.style.cssText = 'font-size:12px;color:var(--light);'
+  statusLabel.textContent = 'Ready'
+
+  statusRow.appendChild(dot); statusRow.appendChild(timerEl); statusRow.appendChild(statusLabel)
+  sheet.appendChild(statusRow)
+
+  // ── Live transcript box ────────────────────────────────────
+  var transcriptBox = document.createElement('div')
+  transcriptBox.id = 'rec-transcript'
+  transcriptBox.style.cssText = 'min-height:80px;max-height:200px;overflow-y:auto;background:#faf6ef;border:1.5px solid #e8ddd0;border-radius:10px;padding:12px;font-size:12.5px;line-height:1.65;color:var(--ink);margin-bottom:16px;white-space:pre-wrap;word-break:break-word;'
+  transcriptBox.style.display = 'none'
+  sheet.appendChild(transcriptBox)
+
+  var transcriptPlaceholder = document.createElement('div')
+  transcriptPlaceholder.style.cssText = 'min-height:80px;background:#faf6ef;border:1.5px solid #e8ddd0;border-radius:10px;padding:12px;font-size:12px;color:var(--light);font-style:italic;text-align:center;display:flex;align-items:center;justify-content:center;margin-bottom:16px;'
+  transcriptPlaceholder.textContent = 'Transcript will appear here as you speak...'
+  transcriptPlaceholder.id = 'rec-placeholder'
+  sheet.appendChild(transcriptPlaceholder)
+
+  // ── Buttons ────────────────────────────────────────────────
+  var recBtn = document.createElement('button')
+  recBtn.id = 'rec-btn'
+  recBtn.style.cssText = 'width:100%;background:#c05050;color:white;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px;transition:background .2s;'
+  recBtn.textContent = '⏺  Start Recording'
+  sheet.appendChild(recBtn)
+
+  var analyzeBtn = document.createElement('button')
+  analyzeBtn.id = 'rec-analyze-btn'
+  analyzeBtn.style.cssText = 'width:100%;background:#7a5090;color:white;border:none;border-radius:12px;padding:13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:none;'
+  analyzeBtn.textContent = '✨ Summarize with AI'
+  sheet.appendChild(analyzeBtn)
+
+  var cancelBtn = document.createElement('button')
+  cancelBtn.style.cssText = 'width:100%;background:transparent;border:1.5px solid #e8ddd0;color:#b0a898;border-radius:10px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;'
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.onclick = function() { stopRecording(); overlay.remove() }
+  sheet.appendChild(cancelBtn)
+
+  // ── AI results area ────────────────────────────────────────
+  var aiResultArea = document.createElement('div')
+  aiResultArea.id = 'rec-ai-results'
+  sheet.appendChild(aiResultArea)
+
+  overlay.appendChild(sheet)
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) { stopRecording(); overlay.remove() } })
+  document.body.appendChild(overlay)
+
+  // ── Recording state ────────────────────────────────────────
+  var recognition = null
+  var isRecording = false
+  var fullTranscript = ''
+  var interimText = ''
+  var timerInterval = null
+  var seconds = 0
+
+  function updateTimer() {
+    seconds++
+    var m = Math.floor(seconds / 60), s = seconds % 60
+    timerEl.textContent = m + ':' + (s < 10 ? '0' : '') + s
+  }
+
+  function stopRecording() {
+    if (!isRecording) return
+    isRecording = false
+    if (recognition) { try { recognition.stop() } catch(e) {} }
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null }
+    dot.style.background = '#e0d8d0'
+    dot.style.animation = 'none'
+    statusLabel.textContent = 'Stopped'
+    recBtn.textContent = '⏺  Start Recording'
+    recBtn.style.background = '#c05050'
+  }
+
+  // Add pulse animation (only once, reuse if already exists)
+  if (!document.getElementById('rec-pulse-style')) {
+    var style = document.createElement('style')
+    style.id = 'rec-pulse-style'
+    style.textContent = '@keyframes recPulse { 0%,100%{opacity:1} 50%{opacity:.35} }'
+    document.head.appendChild(style)
+  }
+
+  recBtn.onclick = function() {
+    if (isRecording) {
+      stopRecording()
+      // Show analyze button if there's a transcript
+      if (fullTranscript.trim().length > 20) {
+        analyzeBtn.style.display = 'block'
+      }
+      return
+    }
+
+    // Start recording
+    recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+    recognition.maxAlternatives = 1
+
+    recognition.onstart = function() {
+      isRecording = true
+      seconds = 0
+      timerInterval = setInterval(updateTimer, 1000)
+      dot.style.background = '#c05050'
+      dot.style.animation = 'recPulse 1.2s infinite'
+      statusLabel.textContent = 'Recording...'
+      recBtn.textContent = '⏹  Stop Recording'
+      recBtn.style.background = '#8a3030'
+      transcriptBox.style.display = 'block'
+      transcriptPlaceholder.style.display = 'none'
+      analyzeBtn.style.display = 'none'
+      aiResultArea.innerHTML = ''
+    }
+
+    recognition.onresult = function(event) {
+      var interim = ''
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var t = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          fullTranscript += t + ' '
+        } else {
+          interim += t
+        }
+      }
+      transcriptBox.textContent = fullTranscript + (interim ? '…' + interim : '')
+      transcriptBox.scrollTop = transcriptBox.scrollHeight
+    }
+
+    recognition.onerror = function(e) {
+      if (e.error === 'no-speech') return // ignore silence
+      stopRecording()
+      statusLabel.textContent = 'Error: ' + e.error
+      if (e.error === 'not-allowed') {
+        statusLabel.textContent = 'Microphone access denied — check browser settings'
+      }
+    }
+
+    recognition.onend = function() {
+      // Auto-restart if still meant to be recording (iOS stops after silence)
+      if (isRecording) {
+        try { recognition.start() } catch(e) { stopRecording() }
+      }
+    }
+
+    try { recognition.start() }
+    catch(e) {
+      statusLabel.textContent = 'Could not start: ' + e.message
+    }
+  }
+
+  // ── AI summarize ───────────────────────────────────────────
+  analyzeBtn.onclick = function() {
+    var transcript = fullTranscript.trim()
+    if (!transcript) return
+    analyzeBtn.disabled = true
+    analyzeBtn.textContent = '✨ Analyzing...'
+    aiResultArea.innerHTML = ''
+
+    _claudeAPI({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: 'You are helping a new shelter worker who recorded an adoption counseling session. Below is the spoken transcript. Extract the most useful observations as structured notes they can save and reference later.\n\nFor each note, pick the best category:\n- question: a question the counselor asked the adopter\n- process: a step or thing the counselor did during the process\n- paperwork: something about forms, contracts, or documents\n- redflag: a concern or red flag the counselor mentioned or watched for\n- goodtoknow: a tip, explanation, or general knowledge shared\n- followup: something that needs follow-up or was unresolved\n\nAlso write a 2-3 sentence overall summary of the session.\n\nReturn ONLY valid JSON:\n{\n  "summary": "2-3 sentence overview of the session",\n  "notes": [\n    {"text": "concise note text", "tag": "category"}\n  ]\n}\n\nTranscript:\n' + transcript
+      }]
+    })
+    .then(function(data) {
+      var raw = ((data.content || []).find(function(b) { return b.type === 'text' }) || {}).text || '{}'
+      var result
+      try { result = JSON.parse(raw.replace(/```json|```/g, '').trim()) }
+      catch(e) {
+        aiResultArea.innerHTML = '<div style="color:#c05050;font-size:12.5px;padding:8px;">Could not parse AI response. Try again.</div>'
+        analyzeBtn.disabled = false; analyzeBtn.textContent = '✨ Summarize with AI'
+        return
+      }
+
+      // Render summary card
+      if (result.summary) {
+        var summCard = document.createElement('div')
+        summCard.style.cssText = 'background:#f5f0fa;border:1.5px solid #c8aae0;border-radius:12px;padding:14px;margin-bottom:12px;margin-top:12px;'
+        var summLabel = document.createElement('div')
+        summLabel.style.cssText = 'font-weight:800;font-size:11px;color:#7a5090;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;'
+        summLabel.textContent = '✨ Session Summary'
+        var summText = document.createElement('div')
+        summText.style.cssText = 'font-size:12.5px;color:var(--ink);line-height:1.6;'
+        summText.textContent = result.summary
+        summCard.appendChild(summLabel); summCard.appendChild(summText)
+
+        // Save summary as a note button
+        var saveSummBtn = document.createElement('button')
+        saveSummBtn.style.cssText = 'margin-top:10px;background:#7a5090;color:white;border:none;border-radius:8px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;'
+        saveSummBtn.textContent = '+ Save Summary as Note'
+        saveSummBtn.onclick = function() {
+          var arr = loadShadowNotes()
+          var now = new Date()
+          arr.unshift({ id:'sn'+Date.now(), text: result.summary, tag: 'goodtoknow',
+            date: todayDateStr(), time: now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) })
+          saveShadowNotes(arr)
+          renderShadowNotesList()
+          saveSummBtn.textContent = '✓ Saved'
+          saveSummBtn.disabled = true
+        }
+        summCard.appendChild(saveSummBtn)
+        aiResultArea.appendChild(summCard)
+      }
+
+      // Render extracted notes
+      var notes = result.notes || []
+      if (notes.length) {
+        var notesLabel = document.createElement('div')
+        notesLabel.style.cssText = 'font-weight:800;font-size:11px;color:#5a7a9a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;'
+        notesLabel.textContent = notes.length + ' extracted notes — tap to save individually or save all'
+        aiResultArea.appendChild(notesLabel)
+
+        var noteItems = []
+        var itemsWrap = document.createElement('div')
+        itemsWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px;'
+
+        notes.forEach(function(n, i) {
+          var t = getShadowTagInfo(n.tag || 'goodtoknow')
+          var card = document.createElement('div')
+          card.style.cssText = 'background:white;border:1.5px solid #a8c0d8;border-radius:10px;padding:10px 12px;display:flex;align-items:flex-start;gap:8px;'
+
+          var tagBadge = document.createElement('span')
+          tagBadge.className = 'shadow-tag'
+          tagBadge.style.cssText = 'background:'+t.bg+';color:'+t.color+';flex-shrink:0;'
+          tagBadge.textContent = t.label
+
+          var noteText = document.createElement('div')
+          noteText.style.cssText = 'font-size:12.5px;color:var(--ink);flex:1;line-height:1.5;'
+          noteText.textContent = n.text
+
+          var saveOne = document.createElement('button')
+          saveOne.style.cssText = 'background:#5a7a9a;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap;'
+          saveOne.textContent = '+ Save'
+          var savedFlag = { saved: false, tag: n.tag || 'goodtoknow' }
+          noteItems.push({ note: n, flag: savedFlag, card: card })
+
+          saveOne.onclick = function() {
+            if (savedFlag.saved) return
+            savedFlag.saved = true
+            var arr = loadShadowNotes()
+            var now = new Date()
+            arr.unshift({ id:'sn'+Date.now(), text: n.text, tag: savedFlag.tag,
+              date: todayDateStr(), time: now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) })
+            saveShadowNotes(arr)
+            renderShadowNotesList()
+            saveOne.textContent = '✓ Saved'
+            saveOne.disabled = true
+            card.style.opacity = '0.55'
+          }
+
+          card.appendChild(tagBadge); card.appendChild(noteText); card.appendChild(saveOne)
+          itemsWrap.appendChild(card)
+        })
+        aiResultArea.appendChild(itemsWrap)
+
+        // Save all button
+        var saveAllBtn = document.createElement('button')
+        saveAllBtn.style.cssText = 'width:100%;background:#5a7a9a;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;'
+        saveAllBtn.textContent = '✅ Save All Notes (' + notes.length + ')'
+        saveAllBtn.onclick = function() {
+          var arr = loadShadowNotes()
+          var now = new Date()
+          var added = 0
+          noteItems.forEach(function(item, i) {
+            if (item.flag.saved) return
+            item.flag.saved = true
+            arr.unshift({ id:'sn'+Date.now()+i, text: item.note.text, tag: item.flag.tag,
+              date: todayDateStr(), time: now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) })
+            added++
+          })
+          if (added) saveShadowNotes(arr)
+          renderShadowNotesList()
+          saveAllBtn.textContent = '✓ All saved'
+          saveAllBtn.disabled = true
+          overlay.remove()
+        }
+        aiResultArea.appendChild(saveAllBtn)
+      }
+
+      analyzeBtn.textContent = '✨ Re-analyze'
+      analyzeBtn.disabled = false
+    })
+    .catch(function(err) {
+      aiResultArea.innerHTML = '<div style="color:#c05050;font-size:12.5px;padding:8px;">Error: ' + err.message + '</div>'
+      analyzeBtn.disabled = false; analyzeBtn.textContent = '✨ Summarize with AI'
+    })
+  }
 }
 
 // Initialize Firebase sync after all functions are defined
