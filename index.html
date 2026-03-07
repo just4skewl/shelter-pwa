@@ -1497,189 +1497,254 @@ function _deleteEvt(id,all,rerender){
 
 // ═══════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════
-// CSV IMPORT — AI-powered (Claude reads the file)
+// CSV IMPORT — smart JS parser, no API needed
 // ═══════════════════════════════════════════════════
 
+function _parseCSV(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n')
+  function splitRow(line) {
+    const cols=[]; let cur='', inQ=false
+    for(let i=0;i<line.length;i++){
+      const c=line[i]
+      if(c==='"'){inQ=!inQ}
+      else if(c===','&&!inQ){cols.push(cur.trim());cur=''}
+      else cur+=c
+    }
+    cols.push(cur.trim())
+    return cols
+  }
+  const nonEmpty = lines.filter(l=>l.trim())
+  if(!nonEmpty.length) return {headers:[],rows:[]}
+  const headers = splitRow(nonEmpty[0])
+  const rows = nonEmpty.slice(1).map(l=>{
+    const vals=splitRow(l)
+    const obj={}
+    headers.forEach((h,i)=>{ obj[h]=(vals[i]||'').trim() })
+    return obj
+  }).filter(r=>Object.values(r).some(v=>v))
+  return {headers,rows}
+}
+
+function _guessCol(headers, keywords) {
+  // exact match first, then partial
+  for(const kw of keywords){
+    const exact = headers.find(h=>h.toLowerCase()===kw.toLowerCase())
+    if(exact) return exact
+  }
+  for(const kw of keywords){
+    const partial = headers.find(h=>h.toLowerCase().includes(kw.toLowerCase()))
+    if(partial) return partial
+  }
+  return ''
+}
+
+function _parseDate(raw) {
+  raw=(raw||'').trim()
+  if(!raw) return ''
+  const yr=new Date().getFullYear()
+  // Serial number (Google Sheets: days since Dec 30 1899)
+  if(/^\d{4,5}$/.test(raw)&&parseInt(raw)>=40000){
+    const d=new Date((parseInt(raw)-25569)*86400000)
+    return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')
+  }
+  // YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.substring(0,10)
+  // M/D/YYYY or M/D/YY or M/D (no year — use current year)
+  const mdy=raw.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/)
+  if(mdy){
+    let y=mdy[3]?parseInt(mdy[3]):yr
+    if(y<100)y+=2000
+    return y+'-'+String(parseInt(mdy[1])).padStart(2,'0')+'-'+String(parseInt(mdy[2])).padStart(2,'0')
+  }
+  // Month name: "March 6, 2026" / "Mar 6 2026"
+  const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}
+  const long=raw.replace(/^[a-z]+,?\s*/i,'').match(/^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/i)
+  if(long){const mo=MONTHS[long[1].toLowerCase()];if(mo)return long[3]+'-'+String(mo).padStart(2,'0')+'-'+String(parseInt(long[2])).padStart(2,'0')}
+  return ''
+}
+
+function _parseTime(raw) {
+  raw=(raw||'').trim()
+  if(!raw) return ''
+  // Shorthand: 2p, 11a, 10a
+  const sh=raw.match(/^(\d{1,2})(a|p)$/i)
+  if(sh){const h=parseInt(sh[1]),ap=sh[2].toUpperCase();return `${h}:00 ${ap==='A'?'AM':'PM'}`}
+  // Already has AM/PM
+  if(/am|pm/i.test(raw)) return raw.toUpperCase().replace(/\s+/,' ').trim()
+  // 24h HH:MM
+  const hm=raw.match(/^(\d{1,2}):(\d{2})/)
+  if(hm){const h=parseInt(hm[1]),m=hm[2],ap=h>=12?'PM':'AM',h12=h%12||12;return `${h12}:${m} ${ap}`}
+  return raw
+}
+
 function showCsvImport(container, events, rerender) {
-  const existing = document.getElementById('csv-import-panel')
-  if (existing) { existing.remove(); return }
+  const existing=document.getElementById('csv-import-panel')
+  if(existing){existing.remove();return}
 
-  const color = '#7a5090', pale = '#f5f0fa', bdr = '#c8aae0'
+  const color='#7a5090', pale='#f5f0fa', bdr='#c8aae0'
 
-  const panel = _el('div', {id:'csv-import-panel', style:{background:'white', border:`1.5px solid ${bdr}`,
-    borderRadius:14, padding:'16px', marginBottom:16, position:'relative'}})
+  const panel=_el('div',{id:'csv-import-panel',style:{background:'white',border:`1.5px solid ${bdr}`,
+    borderRadius:14,padding:'16px',marginBottom:16}})
 
-  // Header
-  panel.appendChild(_el('div', {style:{fontWeight:800, fontSize:14, color, marginBottom:4}},
-    '✨ Smart CSV Import'))
-  panel.appendChild(_el('div', {style:{fontSize:12, color:'#9a8878', lineHeight:1.6, marginBottom:14}},
-    'Export your Google Sheet as CSV (File → Download → CSV), then upload it. Claude will read the whole file and automatically find all JCAC appointments — no column mapping needed.'))
+  panel.appendChild(_el('div',{style:{fontWeight:800,fontSize:14,color,marginBottom:4}},'📋 Import from CSV'))
+  panel.appendChild(_el('div',{style:{fontSize:12,color:'#9a8878',lineHeight:1.6,marginBottom:12}},
+    'Export your Google Sheet as CSV (File → Download → Comma Separated Values), then upload it below. The app will automatically find all JCAC appointments.'))
 
-  // Steps hint
-  const steps = _el('div', {style:{background:pale, border:`1px solid ${bdr}`, borderRadius:10,
-    padding:'10px 13px', marginBottom:14, fontSize:11.5, color:'#6a5878', lineHeight:1.7}})
-  steps.innerHTML = `<strong>How it works:</strong><br>
-    1. In Google Sheets: <strong>File → Download → Comma Separated Values (.csv)</strong><br>
-    2. Upload that file below — Claude will scan it and pull out JCAC appointments<br>
-    3. Review the list and click Import`
+  // How-to steps
+  const steps=_el('div',{style:{background:pale,border:`1px solid ${bdr}`,borderRadius:10,
+    padding:'10px 13px',marginBottom:14,fontSize:11.5,color:'#6a5878',lineHeight:1.7}})
+  steps.innerHTML=`<strong>Steps:</strong><br>
+    1. Open your Google Sheet on phone or desktop<br>
+    2. Tap ⋮ or File → <strong>Download → CSV</strong><br>
+    3. Find the downloaded file in <strong>Downloads</strong> or <strong>Files</strong> and upload below`
   panel.appendChild(steps)
 
-  // File input area
-  const fileBtn = _el('button', {style:{width:'100%', background:'#3a3530', color:'white', border:'none',
-    borderRadius:10, padding:'12px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
-    marginBottom:8}, onclick:()=>fileInput.click()}, '📂  Choose File  (CSV from Files, Drive, or any app)')
-  const fileInput = _el('input', {type:'file', accept:'*', style:{display:'none'}})
+  const fileBtn=_el('button',{style:{width:'100%',background:'#3a3530',color:'white',border:'none',
+    borderRadius:10,padding:'12px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+    marginBottom:8},onclick:()=>fileInput.click()},'📂  Choose CSV File')
+  const fileInput=_el('input',{type:'file',accept:'*',style:{display:'none'}})
   panel.appendChild(fileBtn)
   panel.appendChild(fileInput)
 
-  // Status area
-  const statusDiv = _el('div', {style:{minHeight:0, marginBottom:0}})
+  const statusDiv=_el('div',{})
+  const previewDiv=_el('div',{style:{marginTop:8}})
   panel.appendChild(statusDiv)
-
-  // Preview list area
-  const previewDiv = _el('div', {style:{marginTop:8}})
   panel.appendChild(previewDiv)
 
-  // Cancel
-  panel.appendChild(_el('button', {style:{background:'transparent', border:'1.5px solid #e8ddd0',
-    color:'#b0a898', borderRadius:9, padding:'8px 14px', fontSize:12, cursor:'pointer',
-    fontFamily:'inherit', marginTop:10}, onclick:()=>panel.remove()}, 'Cancel'))
+  panel.appendChild(_el('button',{style:{background:'transparent',border:'1.5px solid #e8ddd0',
+    color:'#b0a898',borderRadius:9,padding:'8px 14px',fontSize:12,cursor:'pointer',
+    fontFamily:'inherit',marginTop:10},onclick:()=>panel.remove()},'Cancel'))
 
-  container.insertBefore(panel, container.firstChild)
+  container.insertBefore(panel,container.firstChild)
 
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files[0]
-    if (!file) return
+  fileInput.addEventListener('change',()=>{
+    const file=fileInput.files[0]; if(!file) return
+    const reader=new FileReader()
+    reader.onload=e=>{
+      try {
+        processCSV(e.target.result, file.name)
+      } catch(err) {
+        showStatus('error',`❌ ${err.message}`)
+      }
+    }
+    reader.onerror=()=>showStatus('error','❌ Could not read file.')
+    reader.readAsText(file)
+    fileBtn.textContent='⏳ Reading file…'
+    fileBtn.disabled=true
+  })
 
-    // Read CSV as text
-    const csvText = await new Promise((res, rej) => {
-      const r = new FileReader()
-      r.onload = e => res(e.target.result)
-      r.onerror = rej
-      r.readAsText(file)
+  function showStatus(type, html2) {
+    const styles={
+      ok:  'background:#edf5ef;border:1.5px solid #a8d9be;color:#3a7a50',
+      warn:'background:#fdf7e0;border:1.5px solid #e8c84a;color:#7a5500',
+      error:'background:#fdf3ef;border:1.5px solid #f0b8a0;color:#c97b5a',
+    }
+    statusDiv.style.cssText=(styles[type]||styles.warn)+';border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:8px'
+    statusDiv.innerHTML=html2
+    fileBtn.disabled=false
+    fileBtn.textContent='📂  Choose Another File'
+  }
+
+  function processCSV(text, filename) {
+    const {headers,rows}=_parseCSV(text)
+    if(!headers.length) { showStatus('error','❌ Could not read CSV headers. Make sure the file is a valid CSV.'); return }
+
+    // Auto-detect columns
+    const locCol    = _guessCol(headers,['loc','location','site','shelter','facility'])
+    const dateCol   = _guessCol(headers,['date','appt date','appointment date','scheduled date'])
+    const timeCol   = _guessCol(headers,['time','appt time','appointment time'])
+    const adopterCol= _guessCol(headers,['adopter name','adopter','applicant','client','person'])
+    const animalCol = _guessCol(headers,['cats of interest','animal','cat','pet','cats'])
+    const typeCol   = _guessCol(headers,['type','event type','appt type','transaction'])
+    const notesCol  = _guessCol(headers,['comments','notes','note','memo','remark'])
+
+    if(!dateCol)   { showStatus('error',`❌ No date column found. Headers: ${headers.join(', ')}`); return }
+    if(!adopterCol){ showStatus('error',`❌ No adopter name column found. Headers: ${headers.join(', ')}`); return }
+
+    // Forward-fill dates BEFORE filtering
+    let lastDate=''
+    const withDates=rows.map(r=>{
+      const parsed=_parseDate(r[dateCol]||'')
+      if(parsed) lastDate=parsed
+      return {...r,_date:lastDate}
     })
 
-    // Truncate if huge (Claude has a context limit; 50k chars covers ~1000 rows easily)
-    const truncated = csvText.length > 50000 ? csvText.substring(0, 50000) + '\n[...truncated]' : csvText
-    const rowCount = csvText.split('\n').length
+    // Filter JCAC
+    const jcacRows = locCol
+      ? withDates.filter(r=>(r[locCol]||'').toLowerCase().includes('jcac'))
+      : withDates  // no location column — take all rows
 
-    statusDiv.style.cssText = 'background:#fdf7e0;border:1.5px solid #e8c84a;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#7a5500;margin-bottom:8px'
-    statusDiv.innerHTML = `⏳ Reading ${rowCount.toLocaleString()} rows — Claude is scanning for JCAC appointments…`
-    previewDiv.innerHTML = ''
-    fileBtn.disabled = true
-    fileBtn.textContent = '⏳ Analyzing…'
-
-    try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: `You are parsing a shelter appointment CSV exported from Google Sheets.
-
-Your job: find every appointment row where the location is "JCAC" (case-insensitive). Return ONLY a JSON array — no explanation, no markdown, no extra text.
-
-Rules:
-- Include only JCAC rows (skip HQ, other locations, blank location rows)
-- Dates may appear only once per day block (forward-fill across blank date cells)
-- Times like "10a", "2p", "11a" mean "10:00 AM", "2:00 PM", "11:00 AM"
-- If no type column exists, default type to "adoption"
-- If adopter name is blank, use "Open Slot"
-- Skip completely empty rows
-
-Return this exact format — an array of objects:
-[
-  {
-    "adopterName": "Jane Smith",
-    "date": "2026-03-10",
-    "time": "2:00 PM",
-    "cats": ["Luna"],
-    "type": "adoption",
-    "notes": ""
-  }
-]
-
-CSV content:
-${truncated}`
-          }]
-        })
-      })
-
-      const data = await resp.json()
-      const raw = data.content?.find(b => b.type === 'text')?.text || '[]'
-      let parsed
-      try {
-        parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
-      } catch {
-        throw new Error('Claude returned unexpected output. Try again or use manual import.')
-      }
-
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        statusDiv.style.cssText = 'background:#fdf3ef;border:1.5px solid #f0b8a0;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#c97b5a;margin-bottom:8px'
-        statusDiv.innerHTML = '⚠️ No JCAC appointments found in this file. Make sure the location column contains "JCAC".'
-        fileBtn.disabled = false; fileBtn.textContent = '📂  Choose CSV File'
-        return
-      }
-
-      // Success — show preview
-      statusDiv.style.cssText = 'background:#edf5ef;border:1.5px solid #a8d9be;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#3a7a50;margin-bottom:8px'
-      statusDiv.innerHTML = `✅ Found <strong>${parsed.length} JCAC appointment${parsed.length!==1?'s':''}</strong> — review below then click Import`
-
-      // Build preview list
-      previewDiv.innerHTML = ''
-      const list = _el('div', {style:{maxHeight:260, overflowY:'auto', display:'flex', flexDirection:'column', gap:5, marginBottom:10}})
-      parsed.forEach(e => {
-        const isRet = e.type === 'return'
-        const item = _el('div', {style:{background:pale, border:`1px solid ${bdr}`, borderRadius:9, padding:'8px 12px', fontSize:12}})
-        item.innerHTML = `
-          <div style="font-weight:700;color:#3a3530">${isRet?'↩ ':'🐾 '}${e.adopterName||'Open Slot'}</div>
-          <div style="color:#9a8878;margin-top:2px;font-size:11.5px">
-            ${e.date||'no date'}${e.time?' · '+e.time:''}${e.cats&&e.cats.length?' · 🐱 '+e.cats.join(', '):''}${isRet?' · Return':''}${e.notes?' · '+e.notes:''}
-          </div>`
-        list.appendChild(item)
-      })
-      previewDiv.appendChild(list)
-
-      const importBtn = _el('button', {style:{width:'100%', background:color, color:'white', border:'none',
-        borderRadius:10, padding:'11px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit'}},
-        `✅ Import ${parsed.length} Appointment${parsed.length!==1?'s':''}`)
-      importBtn.onclick = () => {
-        const newEvents = parsed.map(e => ({
-          id: _uid(),
-          type: e.type === 'return' ? 'return' : 'adoption',
-          adopterName: (e.adopterName || 'Open Slot').trim(),
-          date: e.date || '',
-          time: e.time || '',
-          cats: Array.isArray(e.cats) ? e.cats.filter(Boolean) : (e.cats ? [e.cats] : []),
-          notes: e.notes || '',
-          status: 'scheduled',
-          checklist: {},
-          importedFrom: 'csv-ai'
-        })).filter(e => e.date)
-
-        // Merge — skip exact duplicates (same name + date + time)
-        const existing2 = loadEvents()
-        const deduped = newEvents.filter(n =>
-          !existing2.some(ex => ex.adopterName===n.adopterName && ex.date===n.date && ex.time===n.time)
-        )
-        saveEvents([...existing2, ...deduped])
-        panel.remove()
-        rerender()
-        renderToday()
-      }
-      previewDiv.appendChild(importBtn)
-
-    } catch(err) {
-      statusDiv.style.cssText = 'background:#fdf3ef;border:1.5px solid #f0b8a0;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#c97b5a;margin-bottom:8px'
-      statusDiv.innerHTML = `❌ Error: ${err.message}`
+    if(!jcacRows.length){
+      // Debug: show what location values exist
+      const locVals=locCol ? [...new Set(withDates.map(r=>r[locCol]).filter(Boolean))].slice(0,8) : []
+      showStatus('warn',
+        `⚠️ No JCAC rows found${locCol?' in the "'+locCol+'" column':''}.`+
+        (locVals.length ? `<br>Location values found: <strong>${locVals.join(', ')}</strong><br>If your location isn't "JCAC" try renaming it or contact support.`:'<br>No location column was detected.'))
+      return
     }
 
-    fileBtn.disabled = false
-    fileBtn.textContent = '📂  Choose Another File'
-  })
+    // Build events
+    const built=[], skipped=[]
+    jcacRows.forEach(r=>{
+      if(!r._date){skipped.push(r);return}
+      const name=(adopterCol?r[adopterCol]:'').trim()
+      const cats=animalCol&&r[animalCol]?[r[animalCol].trim()].filter(Boolean):[]
+      const notes=(notesCol?r[notesCol]:'').trim()
+      if(!name||/^no\s*appts?/i.test(name)){skipped.push(r);return}
+      if(!cats.length&&!notes&&name===name){}  // name is enough
+      let type='adoption'
+      if(typeCol&&r[typeCol]&&/return|reclaim|surrender/i.test(r[typeCol])) type='return'
+      built.push({
+        id:_uid(), type,
+        adopterName:name||'Open Slot',
+        date:r._date,
+        time:timeCol?_parseTime(r[timeCol]):'',
+        cats, notes, status:'scheduled', checklist:{}, importedFrom:'csv'
+      })
+    })
+
+    if(!built.length){
+      showStatus('warn',
+        `⚠️ Found ${jcacRows.length} JCAC rows but all were empty or missing dates.`+
+        (skipped.length?`<br>${skipped.length} rows skipped. First date cell raw value: "<strong>${jcacRows[0]?.[dateCol]||'(blank)'}</strong>"`:'')+
+        `<br>Date column detected: <strong>${dateCol}</strong>`)
+      return
+    }
+
+    // Deduplicate against existing
+    const existing2=loadEvents()
+    const dupes=built.filter(n=>existing2.some(ex=>ex.adopterName===n.adopterName&&ex.date===n.date&&ex.time===n.time))
+
+    showStatus('ok',
+      `✅ Found <strong>${built.length} JCAC appointment${built.length!==1?'s':''}</strong>`+
+      (skipped.length?` (${skipped.length} blank rows skipped)`+``:'') +
+      (dupes.length?` · <em>${dupes.length} already exist and will be skipped</em>`:''))
+
+    // Preview list
+    previewDiv.innerHTML=''
+    const list=_el('div',{style:{maxHeight:240,overflowY:'auto',display:'flex',flexDirection:'column',gap:5,marginBottom:10}})
+    built.forEach(ev=>{
+      const isRet=ev.type==='return'
+      const item=_el('div',{style:{background:pale,border:`1px solid ${bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12}})
+      const isDupe=dupes.some(d=>d.adopterName===ev.adopterName&&d.date===ev.date&&d.time===ev.time)
+      item.innerHTML=`<div style="font-weight:700;color:${isDupe?'#b0a898':'#3a3530'}">${isRet?'↩ ':'🐾 '}${ev.adopterName}${isDupe?' <em style="font-weight:400;font-size:10px">(already exists)</em>':''}</div>
+        <div style="color:#9a8878;font-size:11.5px;margin-top:2px">${ev.date}${ev.time?' · '+ev.time:''}${ev.cats.length?' · 🐱 '+ev.cats.join(', '):''}${isRet?' · Return':''}</div>`
+      list.appendChild(item)
+    })
+    previewDiv.appendChild(list)
+
+    const deduped=built.filter(n=>!existing2.some(ex=>ex.adopterName===n.adopterName&&ex.date===n.date&&ex.time===n.time))
+    const importBtn=_el('button',{style:{width:'100%',background:color,color:'white',border:'none',
+      borderRadius:10,padding:'11px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}},
+      `✅ Import ${deduped.length} New Appointment${deduped.length!==1?'s':''}`)
+    importBtn.onclick=()=>{
+      saveEvents([...existing2,...deduped])
+      panel.remove()
+      rerender()
+      renderToday()
+    }
+    previewDiv.appendChild(importBtn)
+  }
 }
 
 
