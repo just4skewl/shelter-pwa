@@ -1390,6 +1390,8 @@ function renderToday() {
     // ── Header — exact .duties-header class ──────────────────
     const hdr = document.createElement('div')
     hdr.className = 'duties-header'
+    hdr.style.background = '#3a3530'
+    hdr.style.boxShadow = '0 2px 12px rgba(58,53,48,0.35)'
     hdr.innerHTML = `
       <div class="duties-header-top">
         <span style="font-size:26px;line-height:1">🏠</span>
@@ -1837,8 +1839,8 @@ function renderAdoptionsTab(){
     const upcomingList = isAdopt ? upcomingAdoptions : upcomingReturns
     const pastList     = isAdopt ? pastAdoptions     : pastReturns
 
-    const accentColor  = isAdopt ? '#7a5090' : '#b05070'
-    const accentBorder = isAdopt ? '#c8aae0' : '#e8b4c4'
+    const accentColor  = _apptTab === 'shadow' ? '#5a7a9a' : isAdopt ? '#7a5090' : '#b05070'
+    const accentBorder = _apptTab === 'shadow' ? '#a8c0d8' : isAdopt ? '#c8aae0' : '#e8b4c4'
 
     // ── Header — exact .duties-header class ──────────────────
     const hdr = document.createElement('div')
@@ -1847,9 +1849,9 @@ function renderAdoptionsTab(){
     hdr.style.boxShadow = `0 2px 12px ${accentColor}55`
     hdr.innerHTML = `
       <div class="duties-header-top">
-        <span style="font-size:26px;line-height:1">🐾</span>
+        <span style="font-size:26px;line-height:1">${_apptTab==='shadow'?'📝':'🐾'}</span>
         <div style="flex:1;min-width:0">
-          <div class="duties-title">Adoptions &amp; Returns</div>
+          <div class="duties-title">${_apptTab==='shadow'?'Observation Notes':'Adoptions &amp; Returns'}</div>
           <div class="duties-sub" id="gs-sync-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
         </div>
         <button id="gs-sync-btn" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap">🔗 Google</button>
