@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <title>🐱 Shelter App</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <!-- PWA Manifest (inline) -->
 <link rel="manifest" href="./manifest.json">
@@ -195,6 +196,14 @@ body {
   display: flex; align-items: flex-start; gap: 12px;
   cursor: pointer; transition: all 0.18s; position: relative; overflow: hidden;
 }
+/* List container variant — children stack vertically */
+.task-card-list {
+  background: var(--warm-white); border: 1.5px solid var(--sand-light);
+  border-radius: 12px; overflow: hidden; margin-bottom: 20px;
+  position: relative;
+}
+.task-card-list.stripe-sage  { border-left: 4px solid var(--sage); }
+.task-card-list.stripe-purple { border-left: 4px solid #7a5090; }
 .task-card::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0;
   width: 3px; background: var(--faint); transition: background 0.2s;
@@ -346,7 +355,7 @@ body {
 .schedule-note  { font-size: 11px; color: var(--mid); margin-top: 2px; line-height: 1.4; }
 
 /* ── Appt mini-card in Today ──────────────────────────────── */
-.appt-mini { display:flex; align-items:center; gap:10; padding:10px 14px 10px 18px; border-bottom:1px solid var(--faint); cursor:pointer; }
+.appt-mini { display:flex; align-items:center; gap:10px; padding:10px 14px 10px 18px; border-bottom:1px solid var(--faint); cursor:pointer; }
 .appt-mini:last-child { border-bottom:none; }
 .appt-mini:active { background: var(--cream); }
 
@@ -739,6 +748,11 @@ function saveEvents(arr) {
 // the real values from your Firebase project console.
 // ═══════════════════════════════════════════════════════════════
 
+// ── Google Sheets auto-sync ──────────────────────────────
+const GSHEETS_CLIENT_ID = '274978664195-2ueojgk87bpa82n17dhnihp3h60jt3da.apps.googleusercontent.com'
+const GSHEETS_SHEET_ID  = '1F_pUJVBvwjT6CEd0-IYkcsskbhB1eS__vIgdxLk5Sdc'
+const GSHEETS_SCOPE     = 'https://www.googleapis.com/auth/spreadsheets.readonly'
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyA3pKMeSCDDEwW2AmFeBpYV-pfu_Xl4Wc4",
   authDomain: "shelter-app-40d52.firebaseapp.com",
@@ -773,9 +787,11 @@ function _fbConfigured() {
 
 function _fbSet(path, data) {
   if (!_fbReady || !_db) return
+  if (!window._fbRecentWrites) window._fbRecentWrites = {}
+  _fbRecentWrites[path] = Date.now()
   _fbLocalWrite = true
   _db.ref(path).set(data)
-    .then(() => { setTimeout(() => { _fbLocalWrite = false }, 500) })
+    .then(() => { setTimeout(() => { _fbLocalWrite = false }, 150) })
     .catch(e => { _fbLocalWrite = false; console.warn('FB write:', path, e.message) })
 }
 
@@ -847,8 +863,8 @@ function _fbAttachListeners() {
   // Helper: listen to a Firebase path, update localStorage, call handler
   const listen = (fbPath, lsKey, handler) => {
     _db.ref(fbPath).on('value', snap => {
-      // Skip echoes from our own writes
-      if (_fbLocalWrite) return
+      // Skip echoes only for the specific path we just wrote (per-path suppression)
+      if (_fbRecentWrites && _fbRecentWrites[fbPath] && Date.now() - _fbRecentWrites[fbPath] < 150) return
       const val = snap.val()
       if (val !== null) try { localStorage.setItem(lsKey, JSON.stringify(val)) } catch {}
       handler && handler(val)
@@ -863,6 +879,259 @@ function _fbAttachListeners() {
   listen(`shelter/daily/${d}/counters`, _countersKey(),      () => { renderCounters(); dUpdateProgress() })
   listen(`shelter/daily/${d}/extra`,    _extraKey(),         () => renderExtraSection())
   listen(`shelter/daily/${d}/notes`,    _notesKey(),         () => renderExtraSection())
+}
+
+
+// ═══════════════════════════════════════════════════
+// GOOGLE SHEETS AUTO-SYNC
+// ═══════════════════════════════════════════════════
+let _gToken     = null   // { access_token, expires_at }
+let _gSyncing   = false
+let _gTokenClient = null
+
+function _gsLoadToken() {
+  try { const t = JSON.parse(localStorage.getItem('gs_token')||'null'); return t } catch { return null }
+}
+function _gsSaveToken(t) {
+  try { localStorage.setItem('gs_token', JSON.stringify(t)) } catch {}
+}
+function _gsClearToken() {
+  localStorage.removeItem('gs_token')
+  localStorage.removeItem('gs_last_sync')
+  _gToken = null
+}
+function _gsLastSync() {
+  return localStorage.getItem('gs_last_sync') || null
+}
+function _gsSaveLastSync() {
+  localStorage.setItem('gs_last_sync', new Date().toISOString())
+}
+function _gsTokenValid(t) {
+  return t && t.access_token && t.expires_at && Date.now() < t.expires_at - 30000
+}
+
+// Init the token client (GIS library must be loaded)
+function _gsInitClient() {
+  if (!window.google || !window.google.accounts) return false
+  if (_gTokenClient) return true
+  _gTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: GSHEETS_CLIENT_ID,
+    scope: GSHEETS_SCOPE,
+    prompt: '',
+    callback: (resp) => {
+      if (resp.error) {
+        console.warn('Google OAuth error:', resp.error)
+        _gsClearToken()
+        _gsUpdateUI()
+        return
+      }
+      _gToken = {
+        access_token: resp.access_token,
+        expires_at: Date.now() + (resp.expires_in || 3600) * 1000
+      }
+      _gsSaveToken(_gToken)
+      _gsUpdateUI()
+      _gsSyncNow()
+    }
+  })
+  return true
+}
+
+// Trigger sign-in popup
+function _gsSignIn() {
+  const t = _gsLoadToken()
+  if (_gsTokenValid(t)) { _gToken = t; _gsSyncNow(); return }
+  if (!_gsInitClient()) { alert('Google sign-in is loading, please try again in a moment.'); return }
+  _gTokenClient.requestAccessToken({ prompt: 'consent' })
+}
+
+// Disconnect Google account
+function _gsSignOut() {
+  if (_gToken && window.google) {
+    window.google.accounts.oauth2.revoke(_gToken.access_token, () => {})
+  }
+  _gsClearToken()
+  _gsUpdateUI()
+}
+
+// Fetch the sheet as CSV and auto-import
+async function _gsSyncNow() {
+  if (_gSyncing) return
+  const t = _gToken || _gsLoadToken()
+  if (!_gsTokenValid(t)) { _gsUpdateUI(); return }
+  _gToken = t
+  _gSyncing = true
+  _gsUpdateUI('syncing')
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${GSHEETS_SHEET_ID}/export?format=csv&gid=0`
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${t.access_token}` }
+    })
+    if (resp.status === 401) { _gsClearToken(); _gsUpdateUI(); _gSyncing = false; return }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const csvText = await resp.text()
+    _gsAutoImport(csvText)
+    _gsSaveLastSync()
+    _gSyncing = false
+    _gsUpdateUI('ok')
+  } catch(e) {
+    console.warn('Sheets sync error:', e.message)
+    _gSyncing = false
+    _gsUpdateUI('error')
+  }
+}
+
+// Auto-import CSV text — merges new events without showing UI
+function _gsAutoImport(csvText) {
+  try {
+    const { headers, rows } = _parseCSV(csvText)
+    if (!headers.length) return
+
+    const locCol     = _guessCol(headers, ['loc','location','site','shelter','facility'])
+    const dateCol    = _guessCol(headers, ['date','appt date','appointment date','scheduled date'])
+    const timeCol    = _guessCol(headers, ['time','appt time','appointment time'])
+    const adopterCol = _guessCol(headers, ['adopter name','adopter','applicant','client','person'])
+    const animalCol  = _guessCol(headers, ['cats of interest','animal','cat','pet','cats'])
+    if (!dateCol || !adopterCol) return
+
+    let lastDate = ''
+    const withDates = rows.map(r => {
+      const parsed = _parseDate(r[dateCol] || '')
+      if (parsed) lastDate = parsed
+      return { ...r, _date: lastDate }
+    })
+
+    const jcacRows = locCol
+      ? withDates.filter(r => (r[locCol] || '').toLowerCase().includes('jcac'))
+      : withDates
+
+    const built = []
+    jcacRows.forEach(r => {
+      if (!r._date) return
+      const name        = (adopterCol ? r[adopterCol] : '').trim()
+      const catMove     = (r['CAT MOVES'] || '').trim()
+      const arrivedNote = (r['ARRIVED? ADOPTED?'] || '').trim()
+      const staffNote   = (r['Staff/ Volunteer Notes'] || '').trim()
+      const cats        = animalCol && r[animalCol] ? [r[animalCol].trim()].filter(Boolean) : []
+      const noAppts     = /^no\s*appts?/i.test(name)
+
+      if (name && !noAppts) {
+        const noteParts = [arrivedNote, staffNote].filter(Boolean)
+        let type = 'adoption'
+        if (/return|reclaim|surrender/i.test(arrivedNote) || /return|reclaim|surrender/i.test(name)) type = 'return'
+        built.push({
+          id: _uid(), type,
+          adopterName: name, date: r._date,
+          time: timeCol ? _parseTime(r[timeCol]) : '',
+          cats, notes: noteParts.join(' · '),
+          status: 'scheduled', checklist: {}, importedFrom: 'sheets'
+        })
+      }
+
+      if (catMove) {
+        const isReturn = /return|reclaim|surrender/i.test(catMove)
+        const catMatch = catMove.match(/\b([A-Z][a-z]{1,12})\s*(?:\(\d+\))?\s*(?:return|adoption|transfer|,| to )/i)
+        const catName  = catMatch ? catMatch[1] : catMove.split(/[\s,]/)[0]
+        built.push({
+          id: _uid(), type: isReturn ? 'return' : 'move',
+          adopterName: catName || 'Unknown',
+          date: r._date,
+          time: timeCol ? _parseTime(r[timeCol]) : '',
+          cats: catName ? [catName] : [],
+          notes: catMove,
+          status: 'scheduled', checklist: {}, importedFrom: 'sheets'
+        })
+      }
+    })
+
+    const existing = loadEvents()
+    // Dedup: keep existing checklist progress; add only genuinely new events
+    const deduped = built.filter(n =>
+      !existing.some(ex => ex.adopterName === n.adopterName && ex.date === n.date && ex.time === n.time)
+    )
+    // Also remove stale 'sheets' events that no longer appear in sheet
+    const sheetsKeys = new Set(built.map(e => `${e.adopterName}|${e.date}|${e.time}`))
+    const kept = existing.filter(ex =>
+      ex.importedFrom !== 'sheets' || sheetsKeys.has(`${ex.adopterName}|${ex.date}|${ex.time}`)
+    )
+    if (deduped.length > 0 || kept.length !== existing.length) {
+      saveEvents([...kept, ...deduped])
+      renderToday()
+      if (typeof renderAdoptionsTab === 'function') renderAdoptionsTab()
+    }
+  } catch(e) {
+    console.warn('Auto-import error:', e.message)
+  }
+}
+
+// Update the sync button UI in the adoptions header
+function _gsUpdateUI(state) {
+  const btn = document.getElementById('gs-sync-btn')
+  const sub = document.getElementById('gs-sync-sub')
+  if (!btn) return
+  const t = _gToken || _gsLoadToken()
+  const connected = _gsTokenValid(t)
+  if (state === 'syncing') {
+    btn.textContent = '⏳ Syncing…'
+    btn.disabled = true
+    return
+  }
+  btn.disabled = false
+  if (connected) {
+    const last = _gsLastSync()
+    const ago  = last ? _gsAgo(last) : 'never'
+    btn.textContent = '🔄 Sync'
+    btn.title = `Last synced: ${ago}\nTap to refresh`
+    if (sub) sub.textContent = `Synced ${ago}`
+    btn.onclick = () => _gsSyncNow()
+  } else {
+    btn.textContent = '🔗 Google'
+    btn.title = 'Connect your Google account to auto-sync the appointments sheet'
+    if (sub) sub.textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+    btn.onclick = () => _gsSignIn()
+  }
+  if (state === 'error') {
+    btn.textContent = '⚠️ Failed'
+    if (sub) sub.textContent = 'Tap to retry'
+  }
+}
+
+function _gsBindDisconnect() {
+  const btn = document.getElementById('gs-sync-btn')
+  if (!btn || btn._longPressSet) return
+  btn._longPressSet = true
+  let timer
+  btn.addEventListener('touchstart', () => {
+    timer = setTimeout(() => {
+      if (confirm('Disconnect Google Sheets sync?')) {
+        _gsSignOut()
+        renderAdoptionsTab()
+      }
+    }, 800)
+  })
+  btn.addEventListener('touchend', () => clearTimeout(timer))
+  btn.addEventListener('touchmove', () => clearTimeout(timer))
+}
+
+function _gsAgo(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h/24)}d ago`
+}
+
+// Called on app startup
+function _gsAutoStart() {
+  const t = _gsLoadToken()
+  if (_gsTokenValid(t)) {
+    _gToken = t
+    // Sync silently on open
+    setTimeout(() => _gsSyncNow(), 1500)
+  }
+  _gsUpdateUI()
 }
 
 // Sync status badge — appears as a small dot next to the app title in Today tab
@@ -1041,6 +1310,7 @@ function renderToday() {
         <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 11px;font-size:15px;cursor:pointer;font-family:inherit;flex-shrink:0">🖨️</button>
       </div>`
     root.appendChild(hdr)
+    setTimeout(() => { _gsUpdateUI(); _gsBindDisconnect() }, 50)
 
     const body = document.createElement('div')
     body.className = 'duties-body'
@@ -1102,9 +1372,7 @@ function renderToday() {
       body.appendChild(sl2)
 
       const medWrap = document.createElement('div')
-      medWrap.className = 'task-card stripe-sage'
-      medWrap.style.marginBottom = '20px'
-      medWrap.style.padding = '0'
+      medWrap.className = 'task-card-list stripe-sage'
       let medHtml = ''
       ;['AM','PM'].forEach(slot => {
         const items = meds.pending.filter(i => i.slot === slot)
@@ -1113,10 +1381,12 @@ function renderToday() {
         const slotBg    = slot==='AM' ? 'var(--amber-pale)' : '#f0f0fa'
         medHtml += `<div style="padding:6px 14px 4px 18px;font-size:10px;font-weight:700;color:${slotColor};letter-spacing:.06em;background:${slotBg};border-bottom:1px solid var(--sand-light)">${slot==='AM'?'☀️  MORNING':'🌙  AFTERNOON'}</div>`
         items.forEach(({cat,med,color}) => {
-          medHtml += `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px 9px 18px;border-bottom:1px solid var(--faint)">
+          medHtml += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px 10px 16px;border-bottom:1px solid var(--faint);border-left:3px solid ${color}">
             <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></div>
-            <span style="font-weight:600;font-size:13px;flex:1;color:var(--ink)">${cat.name}</span>
-            <span style="font-size:11.5px;color:var(--mid)">${med.name} · ${med.dose} ${med.unit}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:13px;color:var(--ink)">${cat.name} <span style="color:var(--mid);font-weight:400;font-size:11px">${cat.room||''}</span></div>
+              <div style="font-size:11.5px;color:var(--mid);margin-top:1px">${med.name} · ${med.dose} ${med.unit}</div>
+            </div>
           </div>`
         })
       })
@@ -1138,8 +1408,7 @@ function renderToday() {
       body.appendChild(empty)
     } else {
       const apptWrap = document.createElement('div')
-      apptWrap.className = 'task-card stripe-purple'
-      apptWrap.style.cssText = 'padding:0;margin-bottom:20px;overflow:hidden'
+      apptWrap.className = 'task-card-list stripe-purple'
       todayEvs.forEach(ev => {
         const isRet  = ev.type === 'return'
         const isMove = ev.type === 'move'
@@ -1378,8 +1647,9 @@ function renderAdoptionsTab(){
         <span style="font-size:26px;line-height:1">🐾</span>
         <div style="flex:1;min-width:0">
           <div class="duties-title">Adoptions &amp; Returns</div>
-          <div class="duties-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+          <div class="duties-sub" id="gs-sync-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
         </div>
+        <button id="gs-sync-btn" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap">🔗 Google</button>
         <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 11px;font-size:15px;cursor:pointer;font-family:inherit;flex-shrink:0">🖨️</button>
       </div>
       <div class="d-tabs">
@@ -1391,6 +1661,7 @@ function renderAdoptionsTab(){
       btn.style.color = accentColor
     })
     root.appendChild(hdr)
+    setTimeout(() => { _gsUpdateUI(); _gsBindDisconnect() }, 50)
 
     const body = document.createElement('div')
     body.className = 'duties-body'
@@ -2861,6 +3132,7 @@ renderExtraSection()
 // Initialize Firebase sync after all functions are defined
 // (runs async, app is already usable from localStorage)
 _fbInit()
+  _gsAutoStart()
 
 // ── PWA Install prompt ────────────────────────────────
 let deferredPrompt
