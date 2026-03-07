@@ -46,6 +46,7 @@ body {
   color: var(--ink);
   height: 100%;
   overflow: hidden; /* outer body doesn't scroll — sections do */
+  overflow-x: hidden;
 }
 
 /* ─── APP SHELL ────────────────────────────────────────────── */
@@ -53,6 +54,7 @@ body {
   position: fixed; inset: 0;
   bottom: calc(var(--nav-h) + var(--safe-bottom));
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   display: none;
 }
@@ -2171,9 +2173,10 @@ function showScanSheet(){
   sheet.appendChild(_el('div',{style:{fontSize:11,color:'#b0a898',textAlign:'center',marginBottom:18,lineHeight:1.6}},
     'Take a photo of your printed sheet.\nClaude will read which boxes are checked\nand offer to sync them back to the app.'))
   const statusDiv=_el('div',{style:{minHeight:40,marginBottom:12,textAlign:'center',fontSize:12.5,color:'#7a6e65',padding:'8px',borderRadius:8}})
-  const fileInput=_el('input',{type:'file',accept:'image/*',style:{display:'none'}})
+  const fileInput=_el('input',{type:'file',accept:'image/*',style:{position:'fixed',top:'-9999px',left:'-9999px',opacity:0}})
+  document.body.appendChild(fileInput)
   fileInput.addEventListener('change',async()=>{
-    const file=fileInput.files[0];if(!file)return
+    const file=fileInput.files[0];if(!file){fileInput.remove();return}
     statusDiv.textContent='📤 Analyzing...';statusDiv.style.background='#fdf7e8';statusDiv.style.color='#c98a2a'
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})
@@ -2205,11 +2208,11 @@ function showScanSheet(){
       }
     }catch(err){statusDiv.style.background='#fdf3ef';statusDiv.style.color='#c97b5a';statusDiv.textContent=`Error: ${err.message}`}
   })
-  sheet.appendChild(statusDiv);sheet.appendChild(fileInput)
+  sheet.appendChild(statusDiv)
   sheet.appendChild(_el('button',{style:{width:'100%',background:'#3a3530',color:'white',border:'none',borderRadius:10,padding:'12px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:10},onclick:()=>fileInput.click()},'📷  Take Photo / Choose Image'))
-  sheet.appendChild(_el('button',{style:{width:'100%',background:'transparent',border:'1.5px solid #e8ddd0',color:'#b0a898',borderRadius:10,padding:'10px',fontSize:12,cursor:'pointer',fontFamily:'inherit'},onclick:()=>overlay.remove()},'Cancel'))
+  sheet.appendChild(_el('button',{style:{width:'100%',background:'transparent',border:'1.5px solid #e8ddd0',color:'#b0a898',borderRadius:10,padding:'10px',fontSize:12,cursor:'pointer',fontFamily:'inherit'},onclick:()=>{fileInput.remove();overlay.remove()}},'Cancel'))
   overlay.appendChild(sheet)
-  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()})
+  overlay.addEventListener('click',e=>{if(e.target===overlay){fileInput.remove();overlay.remove()}})
   document.body.appendChild(overlay)
 }
 
@@ -2667,9 +2670,10 @@ function showMedScan() {
 
   var fileInput = document.createElement('input')
   fileInput.type = 'file'; fileInput.accept = 'image/*'
-  fileInput.style.display = 'none'
+  fileInput.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0'
+  document.body.appendChild(fileInput)
   fileInput.addEventListener('change', function() {
-    var file = fileInput.files[0]; if (!file) return
+    var file = fileInput.files[0]; if (!file) { fileInput.remove(); return }
     statusDiv.textContent = '📤 Reading whiteboard...'; statusDiv.style.background = '#fdf7e8'; statusDiv.style.color = '#c98a2a'
     previewArea.innerHTML = ''
     var reader = new FileReader()
@@ -2721,11 +2725,11 @@ function showMedScan() {
   var cancelBtn = document.createElement('button')
   cancelBtn.style.cssText = 'width:100%;background:transparent;border:1.5px solid #e8ddd0;color:#b0a898;border-radius:10px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;'
   cancelBtn.textContent = 'Cancel'
-  cancelBtn.onclick = function() { overlay.remove() }
+  cancelBtn.onclick = function() { fileInput.remove(); overlay.remove() }
   sheet.appendChild(cancelBtn)
 
   overlay.appendChild(sheet)
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove() })
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) { fileInput.remove(); overlay.remove() } })
   document.body.appendChild(overlay)
 }
 
