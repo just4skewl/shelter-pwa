@@ -1595,6 +1595,19 @@ function renderSmartSchedule(body, todayEvs) {
         </button>
       </div>
     </div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">Am I the only adoption closer?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="closer-opt" data-val="only"
+          style="font-family:inherit;border:1.5px solid var(--purple);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:var(--purple);color:white">
+          ✋ Only closer
+        </button>
+        <button class="closer-opt" data-val="shared"
+          style="font-family:inherit;border:1.5px solid var(--sand);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:var(--mid)">
+          🤝 Another closer too
+        </button>
+      </div>
+    </div>
     <button id="gen-schedule-btn" class="badge tip" style="cursor:pointer;border:none;font-family:inherit;padding:6px 16px;font-size:12px;font-weight:700">✨ Generate Smart Schedule</button>
   </div>`
   wrap.appendChild(card)
@@ -1615,10 +1628,24 @@ function renderSmartSchedule(body, todayEvs) {
   // Default select solo
   wrap.querySelector('[data-val="solo"]').click()
 
-  document.getElementById('gen-schedule-btn').onclick = () => _fetchSchedule(wrap, todayEvs, _selectedStaff)
+  // Closer toggle
+  let _selectedCloser = 'only'
+  wrap.querySelectorAll('.closer-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _selectedCloser = btn.dataset.val
+      wrap.querySelectorAll('.closer-opt').forEach(b => {
+        const active = b.dataset.val === _selectedCloser
+        b.style.background = active ? 'var(--purple)' : 'white'
+        b.style.color = active ? 'white' : 'var(--mid)'
+        b.style.borderColor = active ? 'var(--purple)' : 'var(--sand)'
+      })
+    })
+  })
+
+  document.getElementById('gen-schedule-btn').onclick = () => _fetchSchedule(wrap, todayEvs, _selectedStaff, _selectedCloser)
 }
 
-async function _fetchSchedule(wrap, todayEvs, staffing) {
+async function _fetchSchedule(wrap, todayEvs, staffing, closer) {
   wrap.innerHTML = `<div class="task-card stripe-amber"><div class="task-body" style="padding-left:8px">
     <div class="task-name">🤖 Building your schedule…</div>
     <div class="task-meta"><span class="badge tip">This takes a few seconds</span></div>
@@ -1656,12 +1683,17 @@ FIXED DAILY DUTIES:
 APPOINTMENT CONTEXT (if any today):
 ${apptCtx}
 
+ADOPTION CLOSER STATUS: ${closer === 'only'
+    ? 'I am the ONLY adoption closer today. I must personally greet, process, and complete every adoption — I cannot hand off to anyone else. This means I need to carefully balance being available for adopters while still completing all kennel duties. Flag any windows where I\'ll be stretched thin.'
+    : 'There is ANOTHER adoption closer working today too. We share adoption duties, so I don\'t have to personally handle every appointment. I can focus more on kennel duties and step in for adoptions when available. The schedule should reflect that adoption pressure is shared.'}
+
 IMPORTANT NOTES ABOUT APPOINTMENTS:
-- Each adoption appointment lasts about 60 minutes total but the tech does NOT need to stay with the adopter the entire time
-- Typical flow: greet adopter (5 min) → bring them to meet cat (10 min) → leave them alone together while tech does other tasks → return to complete paperwork (15 min)
-- This means an appointment can OVERLAP with other duties — the tech can start cage cleaning or give meds while the adopter bonds with the cat
-- Return/reclaim appointments are shorter (~20–30 min) and require more direct attention
+- Each adoption appointment lasts about 60 minutes total but I do NOT need to stay with the adopter the entire time
+- Typical flow: greet adopter (5 min) → bring them to meet cat (10 min) → step away to do kennel duties while they bond → return for paperwork (15 min)
+- The bonding window (~30 min) can OVERLAP with cage cleaning, meds, or feeding — schedule tasks during this time
+- Return/reclaim appointments are shorter (~20–30 min) and need more direct attention throughout
 - Flag any appointment times that conflict with medications (those cannot be moved or delegated)
+- IMPORTANT: You are building this schedule FOR Monica (the kennel tech). If you see the name "Monica" in any notes or appointment details, that refers to the user themselves — use "you" instead (e.g. "Amanda taking Choccy" is fine, but "Monica" becomes "you"). All other names (adopters, other staff) can be used normally.
 
 Create a practical schedule for the full shift (9 AM–5 PM) that:
 1. Accounts for today's staffing level
