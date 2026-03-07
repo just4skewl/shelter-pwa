@@ -3515,7 +3515,7 @@ const FREQ_OPTS = [
 ]
 
 const uid      = () => Math.random().toString(36).slice(2,9)
-const todayStr = () => new Date().toISOString().split('T')[0]
+const todayStr = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 const plusDays = (d,n) => { const dt=new Date(d+'T12:00:00'); dt.setDate(dt.getDate()+n); return dt.toISOString().split('T')[0] }
 const fmtShort = d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})
 const fmtDay   = d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
@@ -3575,15 +3575,15 @@ function daysRemaining(med) {
 const DEMO_CATS = [
   {id:'c1',name:'Luna',room:'Room 2',colorIdx:0,notes:'Shy — approach gently',
    meds:[{id:'m1',catId:'c1',name:'Doxycycline',dose:'50',unit:'mg',
-     frequency:'course',times:['AM'],startDate:plusDays(todayDateStr(),-4),endDate:plusDays(todayDateStr(),6),
+     frequency:'course',times:['AM'],startDate:plusDays(todayStr(),-4),endDate:plusDays(todayStr(),6),
      totalDoses:2,intervalDays:7,specificDays:[],notes:'Give with food',active:true}]},
   {id:'c2',name:'Mango',room:'Room 4',colorIdx:1,notes:'Very friendly',
    meds:[{id:'m2',catId:'c2',name:'Terramycin Eye Ointment',dose:'1',unit:'drop(s)',
-     frequency:'daily',times:['AM','PM'],startDate:plusDays(todayDateStr(),-10),endDate:'',
+     frequency:'daily',times:['AM','PM'],startDate:plusDays(todayStr(),-10),endDate:'',
      totalDoses:2,intervalDays:7,specificDays:[],notes:'Apply to both eyes',active:true}]},
   {id:'c3',name:'Biscuit',room:'Room 1',colorIdx:2,notes:'Watch for drooling',
    meds:[{id:'m3',catId:'c3',name:'Pyrantel Dewormer',dose:'1',unit:'ml',
-     frequency:'multi_dose',times:['AM'],startDate:todayDateStr(),endDate:'',
+     frequency:'multi_dose',times:['AM'],startDate:todayStr(),endDate:'',
      totalDoses:2,intervalDays:10,specificDays:[],notes:'Mix into wet food',active:true}]},
 ]
 
@@ -3762,7 +3762,7 @@ function MedApp() {
 
   const props={cats,logs,toggle,addCat,editCat,delCat,addMed,editMed,delMed}
   const TABS=[['today','☀️','Today'],['cats','🐾','Cats & Meds'],['schedule','📅','Schedule'],['history','📋','History']]
-  const today=todayDateStr(); let td=0,tdn=0
+  const today=todayStr(); let td=0,tdn=0
   cats.forEach(cat=>cat.meds.forEach(med=>{if(!isDue(med,today))return;med.times.forEach(slot=>{td++;if(wasLogged(logs,cat.id,med.id,slot,today))tdn++})}))
 
   return (
@@ -3812,7 +3812,7 @@ function MedApp() {
 
 // ── Today ──────────────────────────────────────────────
 function TodayView({cats,logs,toggle}) {
-  const today=todayDateStr(), buckets={AM:[],PM:[]}
+  const today=todayStr(), buckets={AM:[],PM:[]}
   cats.forEach(cat=>cat.meds.forEach(med=>{
     if(!isDue(med,today))return
     med.times.forEach(slot=>buckets[slot].push({cat,med,slot,done:wasLogged(logs,cat.id,med.id,slot,today)}))
@@ -4017,7 +4017,7 @@ function MedForm({initial,onSave,onCancel}) {
   const [unit,sU]=useState(initial?.unit||'mg')
   const [freq,sF]=useState(initial?.frequency||'daily')
   const [times,sT]=useState(initial?.times||['AM'])
-  const [start,sSt]=useState(initial?.startDate||todayDateStr())
+  const [start,sSt]=useState(initial?.startDate||todayStr())
   const [end,sE]=useState(initial?.endDate||'')
   const [totalDoses,sTD]=useState(initial?.totalDoses||2)
   const [ivl,sI]=useState(initial?.intervalDays||7)
@@ -4107,7 +4107,7 @@ function MedForm({initial,onSave,onCancel}) {
 
 // ── Schedule ───────────────────────────────────────────
 function ScheduleView({cats,logs}) {
-  const today = todayDateStr()
+  const today = todayStr()
 
   // Start from Sunday of the week containing "today - 3 days", show 3 full weeks
   const anchor = new Date(plusDays(today, -3) + 'T12:00:00')
@@ -4235,7 +4235,7 @@ function ScheduleView({cats,logs}) {
 
 // ── History ────────────────────────────────────────────
 function HistoryView({cats,logs}) {
-  const today=todayDateStr()
+  const today=todayStr()
   const days=Array.from({length:30},(_,i)=>plusDays(today,-i))
   const catMap=Object.fromEntries(cats.map(c=>[c.id,c]))
   const medMap=Object.fromEntries(cats.flatMap(c=>c.meds.map(m=>[m.id,m])))
