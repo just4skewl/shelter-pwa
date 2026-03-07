@@ -1081,14 +1081,26 @@ function _gsAutoImport(csvText) {
 
     console.log('[GSheets] built events:', built.length)
     const existing = loadEvents()
-    // Dedup: keep existing checklist progress; add only genuinely new events
-    const deduped = built.filter(n =>
-      !existing.some(ex => ex.adopterName === n.adopterName && ex.date === n.date && ex.time === n.time)
-    )
-    // Also remove stale 'sheets' events that no longer appear in sheet
-    const sheetsKeys = new Set(built.map(e => `${e.adopterName}|${e.date}|${e.time}`))
+
+    // Normalize a key for reliable dedup comparison
+    // Lowercased, trimmed, empty-string for missing time
+    const _evKey = e => [
+      (e.adopterName || '').trim().toLowerCase(),
+      (e.date || '').trim(),
+      (e.time || '').trim(),
+      (e.type || 'adoption')
+    ].join('|')
+
+    const existingKeys = new Set(existing.map(_evKey))
+
+    // Only add events that don't already exist (by any import source)
+    const deduped = built.filter(n => !existingKeys.has(_evKey(n)))
+
+    // Remove stale sheets-imported events no longer in the sheet
+    // (but always keep manually added events and CSV imports)
+    const builtKeys = new Set(built.map(_evKey))
     const kept = existing.filter(ex =>
-      ex.importedFrom !== 'sheets' || sheetsKeys.has(`${ex.adopterName}|${ex.date}|${ex.time}`)
+      ex.importedFrom !== 'sheets' || builtKeys.has(_evKey(ex))
     )
     console.log('[GSheets] deduped (new):', deduped.length, '| kept:', kept.length)
     if (deduped.length > 0 || kept.length !== existing.length) {
