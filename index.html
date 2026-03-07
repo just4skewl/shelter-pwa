@@ -1194,7 +1194,10 @@ function renderToday() {
     document.getElementById('add-note-btn').onclick  = () => showAddNote(body)
     document.getElementById('add-extra-btn').onclick = () => showAddExtraTask(body)
 
-    _initSyncBadge()
+    // Initialise sync badge to current state
+    if (!_fbConfigured()) _showSyncBadge('unconfigured')
+    else if (_fbConnected) _showSyncBadge('online')
+    else _showSyncBadge('offline')
   } catch(err) {
     root.innerHTML = `<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
     console.error(err)
