@@ -1067,15 +1067,23 @@ function _gsAutoImport(csvText) {
         const isReturn = /return|reclaim|surrender/i.test(catMove)
         const catMatch = catMove.match(/\b([A-Z][a-z]{1,12})\s*(?:\(\d+\))?\s*(?:return|adoption|transfer|,| to )/i)
         const catName  = catMatch ? catMatch[1] : catMove.split(/[\s,]/)[0]
-        built.push({
-          id: _uid(), type: isReturn ? 'return' : 'move',
-          adopterName: catName || 'Unknown',
-          date: r._date,
-          time: timeCol ? _parseTime(r[timeCol]) : '',
-          cats: catName ? [catName] : [],
-          notes: catMove,
-          status: 'scheduled', checklist: {}, importedFrom: 'sheets'
-        })
+
+        // Skip if the name column already covers this same cat+type on this row
+        // (prevents double-entry when a return appears in both adopter col and CAT MOVES col)
+        const alreadyCovered = name && !noAppts && catName &&
+          name.toLowerCase().includes(catName.toLowerCase())
+
+        if (!alreadyCovered) {
+          built.push({
+            id: _uid(), type: isReturn ? 'return' : 'move',
+            adopterName: catName || 'Unknown',
+            date: r._date,
+            time: timeCol ? _parseTime(r[timeCol]) : '',
+            cats: catName ? [catName] : [],
+            notes: catMove,
+            status: 'scheduled', checklist: {}, importedFrom: 'sheets'
+          })
+        }
       }
     })
 
@@ -1618,22 +1626,50 @@ Respond ONLY with a JSON array, no markdown, no explanation. Each item:
 Types: "duty", "appointment", "laundry", "warning", "free"`
 
   try {
+    wrap.innerHTML = `<div class="task-card stripe-amber"><div class="task-body" style="padding-left:8px">
+      <div class="task-name">🤖 Building your schedule…</div>
+      <div class="task-meta"><span class="badge tip">Waking up server, may take ~15s on first call</span></div>
+    </div></div>`
+
     const data = await _claudeAPI({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      model: 'claude-opus-4-5',
+      max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }]
     })
-    const raw = data.content?.find(b => b.type==='text')?.text || '[]'
-    const clean = raw.replace(/```json|```/g,'').trim()
-    const schedule = JSON.parse(clean)
+
+    // Surface API-level errors (wrong key, quota, etc.)
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error))
+
+    const raw = data.content?.find(b => b.type==='text')?.text || ''
+    if (!raw) throw new Error('Empty response from AI — proxy may be down')
+
+    // Strip markdown fences if present
+    const clean = raw.replace(/^```[\w]*\n?/,'').replace(/```$/,'').trim()
+
+    let schedule
+    try {
+      schedule = JSON.parse(clean)
+    } catch(parseErr) {
+      // Try extracting JSON array if wrapped in extra text
+      const match = clean.match(/\[\s*\{[\s\S]*\}\s*\]/)
+      if (match) { schedule = JSON.parse(match[0]) }
+      else throw new Error('Could not parse schedule JSON. Raw: ' + raw.slice(0, 120))
+    }
+
+    if (!Array.isArray(schedule) || schedule.length === 0) {
+      throw new Error('Schedule came back empty — try regenerating')
+    }
+
     _scheduleCache = schedule
     _scheduleDate  = todayDateStr()
     _drawSchedule(wrap, schedule)
   } catch(err) {
-    wrap.innerHTML = `<div class="task-card stripe-rose"><div class="task-body" style="padding-left:8px">
-      <div class="task-name">⚠️ Couldn't generate schedule</div>
-      <div class="task-meta"><span class="badge solo">${err.message}</span></div>
-    </div></div>`
+    console.error('[Schedule]', err)
+    wrap.innerHTML = `<div class="task-card" style="border-left:3px solid var(--terra);padding:14px 16px">
+      <div class="task-name" style="color:var(--terra);font-weight:700;margin-bottom:6px">⚠️ Couldn't generate schedule</div>
+      <div class="task-meta" style="font-size:11.5px;color:var(--mid);margin-bottom:10px">${err.message}</div>
+      <button onclick="_scheduleCache=null;renderToday()" style="font-family:inherit;background:var(--terra);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">↺ Try Again</button>
+    </div>`
   }
 }
 
