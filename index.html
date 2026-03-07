@@ -197,7 +197,16 @@ body {
   width: 3px; background: var(--faint); transition: background 0.2s;
 }
 .task-card.done { opacity: 0.55; }
-.task-card.done::before { background: var(--sage); }
+.task-card.done::before        { background: var(--sage); }
+.task-card.stripe-terra::before  { background: var(--terra); }
+.task-card.stripe-sage::before   { background: var(--sage); }
+.task-card.stripe-adopt::before  { background: #7a5090; }
+.task-card.stripe-return::before { background: #b05070; }
+.task-card.stripe-amber::before  { background: var(--amber); }
+.task-card.stripe-dim::before    { background: var(--sand); }
+.task-card.no-stripe::before     { background: transparent; }
+/* column-direction card variant (stat cards, etc.) */
+.task-card.card-col { flex-direction: column; align-items: stretch; gap: 0; }
 .task-card.done .task-name { text-decoration: line-through; color: var(--mid); }
 .task-checkbox {
   width: 18px; height: 18px; border: 2px solid var(--sand);
@@ -962,16 +971,16 @@ function renderToday() {
   if (!root) return
   root.innerHTML = ''
   try {
-    const events  = loadEvents()
+    const events   = loadEvents()
     const todayEvs = events.filter(a => a.date === todayDateStr()).sort((a,b) => _parseTime(a.time) - _parseTime(b.time))
     const conflicts = detectConflicts(events)
     const meds  = getMedsDueSummary()
     const tasks = getTaskProgress()
     const now   = new Date(), hour = now.getHours()
     const greeting = hour < 12 ? 'Good morning ☀️' : hour < 17 ? 'Good afternoon 🌿' : 'Good evening 🌙'
-    const dateStr  = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'})
+    const dateStr  = now.toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric'})
 
-    // ── HEADER — identical markup to .duties-header ──────────
+    // ── HEADER ─────────────────────────────────────────────
     const hdr = document.createElement('div')
     hdr.className = 'duties-header'
     hdr.innerHTML = `
@@ -992,58 +1001,58 @@ function renderToday() {
       </div>`
     root.appendChild(hdr)
 
-    // ── BODY ─────────────────────────────────────────────────
+    // ── BODY ──────────────────────────────────────────────
     const body = document.createElement('div')
     body.className = 'duties-body'
-    body.style.cssText = 'display:flex;flex-direction:column;gap:0;padding-bottom:88px'
+    body.style.paddingBottom = '88px'
     root.appendChild(body)
 
-    // ── Firebase banner ──────────────────────────────────────
+    // Firebase banner
     if (!_fbConfigured()) {
       const fb = document.createElement('div')
-      fb.style.cssText = 'background:#fdf7e0;border:1.5px solid #e8c84a;border-radius:13px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.5'
+      fb.style.cssText = 'background:#fdf7e0;border:1.5px solid #e8c84a;border-radius:12px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.5'
       fb.innerHTML = '🔥 <strong>Firebase sync not configured</strong> — data saves locally only.'
       body.appendChild(fb)
     }
 
-    // ── Conflict alert ───────────────────────────────────────
+    // Conflict alert
     if (conflicts.length > 0) {
       const al = document.createElement('div')
-      al.style.cssText = 'background:#fffbf0;border:1.5px solid #f0c94a;border-radius:13px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.6'
+      al.style.cssText = 'background:#fffbf0;border:1.5px solid #f0c94a;border-radius:12px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.6'
       al.innerHTML = '⚠️ <strong>' + conflicts.length + ' schedule conflict' + (conflicts.length > 1 ? 's' : '') + ' today</strong><br>'
         + conflicts.map(c => '<span style="font-size:11.5px">' + c.msg + '</span>').join('<br>')
       body.appendChild(al)
     }
 
-    // ── Progress stats — 2-col grid, same card style as task-cards ──
+    // ── STAT CARDS — 2-col grid ────────────────────────────
     const taskPct = tasks.total > 0 ? Math.round(tasks.done / tasks.total * 100) : 0
     const medPct  = meds.total  > 0 ? Math.round(meds.doneCount / meds.total * 100) : 0
     const grid = document.createElement('div')
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px'
-    const makeStatCard = (icon, label, pct, sub, accent, section) => {
+    const makeStatCard = (icon, label, pct, sub, stripeClass, section) => {
       const card = document.createElement('div')
-      card.className = 'task-card'
-      card.style.cssText = `flex-direction:column;align-items:stretch;gap:0;padding:13px 14px 11px;cursor:pointer;border-left:3px solid ${accent}`
+      card.className = `task-card card-col ${stripeClass}`
+      card.style.cssText = 'cursor:pointer;padding:13px 14px 11px'
       card.onclick = () => switchSection(section)
       card.innerHTML = `
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
           <span style="font-size:17px">${icon}</span>
-          <span class="task-name" style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--light)">${label}</span>
+          <span style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--light)">${label}</span>
         </div>
-        <div style="font-size:26px;font-weight:800;color:${pct===100?'var(--sage)':'var(--ink)'};letter-spacing:-.03em;line-height:1">${pct}%</div>
-        <div style="font-size:11px;color:var(--mid);margin:2px 0 8px">${sub}</div>
+        <div style="font-size:26px;font-weight:800;color:${pct===100?'var(--sage)':'var(--ink)'};letter-spacing:-.03em;line-height:1;margin-bottom:2px">${pct}%</div>
+        <div style="font-size:11px;color:var(--mid);margin-bottom:8px">${sub}</div>
         <div style="height:4px;background:var(--faint);border-radius:999px;overflow:hidden">
-          <div style="height:100%;border-radius:999px;width:${pct}%;transition:width .5s;background:${pct===100?'var(--sage)':accent}"></div>
+          <div style="height:100%;border-radius:999px;width:${pct}%;transition:width .5s;background:${pct===100?'var(--sage)':stripeClass==='stripe-terra'?'var(--terra)':'var(--sage)'}"></div>
         </div>`
       return card
     }
-    grid.appendChild(makeStatCard('📋', 'Tasks', taskPct,
-      taskPct === 100 ? 'All done! ✅' : `${tasks.done} of ${tasks.total} done`, 'var(--terra)', 'duties'))
-    grid.appendChild(makeStatCard('💊', 'Meds', medPct,
-      meds.total === 0 ? 'None today' : medPct === 100 ? 'All given! ✅' : `${meds.doneCount} of ${meds.total} given`, 'var(--sage)', 'meds'))
+    grid.appendChild(makeStatCard('📋','Tasks',taskPct,
+      taskPct===100?'All done! ✅':`${tasks.done} of ${tasks.total} done`,'stripe-terra','duties'))
+    grid.appendChild(makeStatCard('💊','Meds',medPct,
+      meds.total===0?'None today':medPct===100?'All given! ✅':`${meds.doneCount} of ${meds.total} given`,'stripe-sage','meds'))
     body.appendChild(grid)
 
-    // ── Pending meds ─────────────────────────────────────────
+    // ── MEDS DUE TODAY ─────────────────────────────────────
     if (meds.pending.length > 0) {
       const sl = document.createElement('div')
       sl.className = 'section-label'
@@ -1051,23 +1060,23 @@ function renderToday() {
       sl.innerHTML = '💊 Meds Due Today <button onclick="switchSection(\'meds\')" style="font-family:inherit;background:transparent;border:none;color:var(--sage);font-size:.75rem;font-weight:700;cursor:pointer;margin-left:4px">View all →</button>'
       body.appendChild(sl)
 
-      ;['AM', 'PM'].forEach(slot => {
+      ;['AM','PM'].forEach(slot => {
         const items = meds.pending.filter(i => i.slot === slot)
         if (!items.length) return
         const block = document.createElement('div')
         block.className = 'time-block'
         block.innerHTML = `<div class="time-header">
-          <span class="time-tag ${slot === 'AM' ? 'am' : 'pm'}">${slot === 'AM' ? '☀️ AM' : '🌙 PM'}</span>
-          <span class="time-range">${slot === 'AM' ? 'Morning doses' : 'Afternoon doses'}</span>
+          <span class="time-tag ${slot==='AM'?'am':'pm'}">${slot==='AM'?'☀️ AM':'🌙 PM'}</span>
+          <span class="time-range">${slot==='AM'?'Morning doses':'Afternoon doses'}</span>
         </div>`
         const list = document.createElement('div')
         list.className = 'task-list'
         items.forEach(({cat, med, color}) => {
           const card = document.createElement('div')
-          card.className = 'task-card'
-          card.style.cssText = `cursor:default;border-left:3px solid var(--sage)`
+          card.className = 'task-card stripe-sage'
+          card.style.cursor = 'default'
           card.innerHTML = `
-            <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;margin-top:2px"></div>
+            <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;margin-top:3px"></div>
             <div class="task-body">
               <div class="task-name">${cat.name}</div>
               <div class="task-meta">
@@ -1081,13 +1090,12 @@ function renderToday() {
       })
     }
 
-    // ── Today's appointments ─────────────────────────────────
-    const hasEvents = todayEvs.length > 0
-    const apptSL = document.createElement('div')
-    apptSL.className = 'section-label'
-    apptSL.style.color = '#7a5090'
-    apptSL.innerHTML = `🐾 Today's Appointments${hasEvents ? ' (' + todayEvs.length + ')' : ''} <button onclick="switchSection('adoptions')" style="font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.75rem;font-weight:700;cursor:pointer;margin-left:4px">Manage →</button>`
-    body.appendChild(apptSL)
+    // ── TODAY'S APPOINTMENTS ──────────────────────────────
+    const sl2 = document.createElement('div')
+    sl2.className = 'section-label'
+    sl2.style.color = '#7a5090'
+    sl2.innerHTML = `🐾 Today's Appointments${todayEvs.length?' ('+todayEvs.length+')':''} <button onclick="switchSection('adoptions')" style="font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.75rem;font-weight:700;cursor:pointer;margin-left:4px">Manage →</button>`
+    body.appendChild(sl2)
 
     const apptBlock = document.createElement('div')
     apptBlock.className = 'time-block'
@@ -1095,37 +1103,37 @@ function renderToday() {
     apptList.className = 'task-list'
     apptList.style.marginBottom = '20px'
 
-    if (!hasEvents) {
+    if (!todayEvs.length) {
       const empty = document.createElement('div')
-      empty.className = 'task-card'
+      empty.className = 'task-card no-stripe'
       empty.style.cssText = 'cursor:default;color:var(--light);font-style:italic;font-size:.84rem;justify-content:center'
       empty.textContent = 'No appointments scheduled for today'
       apptList.appendChild(empty)
     } else {
       todayEvs.forEach(ev => {
-        const isReturn = ev.type === 'return'
-        const col  = isReturn ? '#b05070' : '#7a5090'
-        const pale = isReturn ? '#fdf0f3' : '#f0eaf8'
-        const allSteps = isReturn ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before, ...ADOPTION_CHECKLIST.during, ...ADOPTION_CHECKLIST.after]
-        const doneSteps = allSteps.filter(s => (ev.checklist || {})[s.id]).length
+        const isRet = ev.type === 'return'
+        const col   = isRet ? '#b05070' : '#7a5090'
+        const pale  = isRet ? '#fdf0f3' : '#f0eaf8'
+        const allSteps = isRet ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
+        const doneN    = allSteps.filter(s => (ev.checklist||{})[s.id]).length
         const card = document.createElement('div')
-        card.className = 'task-card'
-        card.style.cssText = `cursor:pointer;border-left:3px solid ${col}`
+        card.className = `task-card ${isRet?'stripe-return':'stripe-adopt'}`
+        card.style.cursor = 'pointer'
         card.onclick = () => switchSection('adoptions')
         card.innerHTML = `
-          <div style="width:34px;height:34px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">${isReturn ? '↩' : '🐾'}</div>
+          <div style="width:34px;height:34px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">${isRet?'↩':'🐾'}</div>
           <div class="task-body">
-            <div class="task-name">${ev.adopterName || 'Adopter'}</div>
+            <div class="task-name">${ev.adopterName||'Adopter'}</div>
             <div class="task-meta">
-              ${ev.time ? `<span class="badge quick" style="background:${pale};color:${col};border-color:${col}44">🕐 ${ev.time}</span>` : ''}
-              ${isReturn ? '<span class="badge solo">↩ Return</span>' : '<span class="badge delegate">🐾 Adoption</span>'}
-              ${ev.cats && ev.cats.length ? `<span class="badge tip">🐱 ${ev.cats.join(', ')}</span>` : ''}
+              ${ev.time?`<span class="badge quick" style="background:${pale};color:${col};border-color:${col}44">🕐 ${ev.time}</span>`:''}
+              ${isRet?'<span class="badge solo">↩ Return</span>':'<span class="badge delegate">🐾 Adoption</span>'}
+              ${ev.cats&&ev.cats.length?`<span class="badge tip">🐱 ${ev.cats.join(', ')}</span>`:''}
             </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
               <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden">
-                <div style="height:100%;border-radius:999px;background:${col};width:${allSteps.length > 0 ? doneSteps/allSteps.length*100 : 0}%;transition:width .3s"></div>
+                <div style="height:100%;border-radius:999px;background:${col};width:${allSteps.length>0?doneN/allSteps.length*100:0}%;transition:width .3s"></div>
               </div>
-              <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneSteps}/${allSteps.length}</span>
+              <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneN}/${allSteps.length}</span>
             </div>
           </div>`
         apptList.appendChild(card)
@@ -1134,17 +1142,17 @@ function renderToday() {
     apptBlock.appendChild(apptList)
     body.appendChild(apptBlock)
 
-    // ── Scan button ──────────────────────────────────────────
-    const scanWrap = document.createElement('div')
-    scanWrap.className = 'time-block'
-    scanWrap.innerHTML = `<div class="task-list">
-      <div class="task-card" onclick="showScanSheet()" style="cursor:pointer;justify-content:center;color:var(--mid);font-size:12px;font-weight:600;gap:8px">
+    // Scan button
+    const scanBlock = document.createElement('div')
+    scanBlock.className = 'time-block'
+    scanBlock.innerHTML = `<div class="task-list">
+      <div class="task-card no-stripe" onclick="showScanSheet()" style="cursor:pointer;justify-content:center;color:var(--mid);font-size:12px;font-weight:600;gap:8px">
         📷 Scan printed checklist to sync
       </div>
     </div>`
-    body.appendChild(scanWrap)
+    body.appendChild(scanBlock)
 
-    // ── Footer ───────────────────────────────────────────────
+    // Footer
     const footer = document.createElement('div')
     footer.style.cssText = "text-align:center;padding:28px 0 8px;font-family:'Caveat',cursive;font-size:1.1rem;color:var(--sand-dark)"
     footer.innerHTML = 'made with <span style="color:var(--terra)">♥</span> for Michi & the cats 🐾'
@@ -1171,16 +1179,16 @@ function renderAdoptionsTab() {
   try {
     const events = loadEvents()
     const today  = todayDateStr()
-    const todayAdoptions = events.filter(e => e.date===today && e.type!=='return').sort((a,b) => _parseTime(a.time)-_parseTime(b.time))
-    const todayReturns   = events.filter(e => e.date===today && e.type==='return' ).sort((a,b) => _parseTime(a.time)-_parseTime(b.time))
-    const pastAdoptions  = events.filter(e => e.date<today  && e.type!=='return').sort((a,b) => b.date.localeCompare(a.date))
-    const pastReturns    = events.filter(e => e.date<today  && e.type==='return' ).sort((a,b) => b.date.localeCompare(a.date))
+    const todayAdoptions = events.filter(e=>e.date===today&&e.type!=='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const todayReturns   = events.filter(e=>e.date===today&&e.type==='return' ).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const pastAdoptions  = events.filter(e=>e.date<today &&e.type!=='return').sort((a,b)=>b.date.localeCompare(a.date))
+    const pastReturns    = events.filter(e=>e.date<today &&e.type==='return' ).sort((a,b)=>b.date.localeCompare(a.date))
 
     const isAdopt      = _apptTab === 'adoptions'
     const accentColor  = isAdopt ? '#7a5090' : '#b05070'
     const accentBorder = isAdopt ? '#c8aae0' : '#e8b4c4'
 
-    // ── HEADER — same markup as .duties-header ───────────────
+    // ── HEADER ──────────────────────────────────────────────
     const hdr = document.createElement('div')
     hdr.className = 'duties-header'
     hdr.style.cssText = `background:${accentColor};box-shadow:0 2px 12px ${accentColor}55`
@@ -1196,22 +1204,20 @@ function renderAdoptionsTab() {
           🖨️ Print
         </button>
       </div>`
-
-    // Tab bar — same .d-tabs / .d-tab-btn classes ────────────
     const tabBar = document.createElement('div')
     tabBar.className = 'd-tabs'
     ;[['adoptions','🐾 Adoptions'],['returns','↩ Returns']].forEach(([key,label]) => {
       const btn = document.createElement('button')
-      btn.className = 'd-tab-btn' + (_apptTab === key ? ' active' : '')
-      btn.style.color = _apptTab === key ? accentColor : 'rgba(255,255,255,0.85)'
+      btn.className = 'd-tab-btn' + (_apptTab===key?' active':'')
+      btn.style.color = _apptTab===key ? accentColor : 'rgba(255,255,255,0.85)'
       btn.textContent = label
-      btn.onclick = () => { _apptTab = key; _expandedEvent = null; renderAdoptionsTab() }
+      btn.onclick = () => { _apptTab=key; _expandedEvent=null; renderAdoptionsTab() }
       tabBar.appendChild(btn)
     })
     hdr.appendChild(tabBar)
     root.appendChild(hdr)
 
-    // ── BODY — same .duties-body class ───────────────────────
+    // ── BODY ────────────────────────────────────────────────
     const body = document.createElement('div')
     body.className = 'duties-body'
     body.style.paddingBottom = '88px'
@@ -1220,7 +1226,7 @@ function renderAdoptionsTab() {
     const todayList = isAdopt ? todayAdoptions : todayReturns
     const pastList  = isAdopt ? pastAdoptions  : pastReturns
 
-    // ── Action buttons ───────────────────────────────────────
+    // Action buttons
     const btnRow = document.createElement('div')
     btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-bottom:18px'
     if (isAdopt) {
@@ -1234,36 +1240,35 @@ function renderAdoptionsTab() {
     const addBtn = document.createElement('button')
     addBtn.style.cssText = `background:${accentColor};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit`
     addBtn.textContent = isAdopt ? '+ Add Adoption' : '+ Log Return'
-    addBtn.onclick = () => showEventForm(body, events, isAdopt ? 'adoption' : 'return', renderAdoptionsTab)
+    addBtn.onclick = () => showEventForm(body, events, isAdopt?'adoption':'return', renderAdoptionsTab)
     btnRow.appendChild(addBtn)
     body.appendChild(btnRow)
 
-    // ── Today section ────────────────────────────────────────
+    // Today section label
     const todaySL = document.createElement('div')
     todaySL.className = 'section-label'
     todaySL.style.color = accentColor
-    todaySL.textContent = `Today — ${todayList.length ? todayList.length + ' appointment' + (todayList.length !== 1 ? 's' : '') : 'none scheduled'}`
+    todaySL.textContent = `Today — ${todayList.length ? todayList.length+' appointment'+(todayList.length!==1?'s':'') : 'none scheduled'}`
     body.appendChild(todaySL)
 
     const todayBlock = document.createElement('div')
     todayBlock.className = 'time-block'
-    const todayList2 = document.createElement('div')
-    todayList2.className = 'task-list'
-    todayList2.style.marginBottom = '20px'
-
+    const todayCards = document.createElement('div')
+    todayCards.className = 'task-list'
+    todayCards.style.marginBottom = '20px'
     if (!todayList.length) {
       const empty = document.createElement('div')
-      empty.className = 'task-card'
+      empty.className = 'task-card no-stripe'
       empty.style.cssText = 'cursor:default;color:var(--light);font-style:italic;font-size:.84rem;justify-content:center'
       empty.textContent = isAdopt ? 'No adoption appointments today' : 'No returns today'
-      todayList2.appendChild(empty)
+      todayCards.appendChild(empty)
     } else {
-      todayList.forEach(ev => todayList2.appendChild(renderEventCard(ev, events, renderAdoptionsTab)))
+      todayList.forEach(ev => todayCards.appendChild(renderEventCard(ev, events, renderAdoptionsTab)))
     }
-    todayBlock.appendChild(todayList2)
+    todayBlock.appendChild(todayCards)
     body.appendChild(todayBlock)
 
-    // ── Past history ─────────────────────────────────────────
+    // Past history
     if (pastList.length > 0) {
       const histSL = document.createElement('div')
       histSL.className = 'section-label'
@@ -1271,11 +1276,11 @@ function renderAdoptionsTab() {
       body.appendChild(histSL)
       const histBlock = document.createElement('div')
       histBlock.className = 'time-block'
-      const histList = document.createElement('div')
-      histList.className = 'task-list'
-      histList.style.marginBottom = '16px'
-      pastList.slice(0, 8).forEach(ev => histList.appendChild(renderEventCard(ev, events, renderAdoptionsTab, true)))
-      histBlock.appendChild(histList)
+      const histCards = document.createElement('div')
+      histCards.className = 'task-list'
+      histCards.style.marginBottom = '16px'
+      pastList.slice(0,8).forEach(ev => histCards.appendChild(renderEventCard(ev, events, renderAdoptionsTab, true)))
+      histBlock.appendChild(histCards)
       body.appendChild(histBlock)
     }
 
@@ -1288,69 +1293,51 @@ function renderAdoptionsTab() {
 }
 
 function renderEventCard(ev, all, rerender, compact) {
-  const isReturn   = ev.type === 'return'
-  const col        = isReturn ? '#b05070' : '#7a5090'
-  const pale       = isReturn ? '#fdf0f3' : '#f0eaf8'
-  const border     = isReturn ? '#e8b4c4' : '#c8aae0'
-  const checklist  = isReturn ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before, ...ADOPTION_CHECKLIST.during, ...ADOPTION_CHECKLIST.after]
-  const done       = ev.checklist || {}
-  const doneSteps  = checklist.filter(s => done[s.id]).length
-  const totalSteps = checklist.length
+  const isRet     = ev.type === 'return'
+  const col       = isRet ? '#b05070' : '#7a5090'
+  const pale      = isRet ? '#fdf0f3' : '#f0eaf8'
+  const border    = isRet ? '#e8b4c4' : '#c8aae0'
+  const checklist = isRet ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
+  const done      = ev.checklist || {}
+  const doneN     = checklist.filter(s => done[s.id]).length
+  const totalN    = checklist.length
   const isExpanded = _expandedEvent === ev.id && !compact
 
-  // ── Card — uses .task-card class ─────────────────────────
   const card = document.createElement('div')
-  card.className = 'task-card'
-  card.style.cssText = `flex-direction:column;align-items:stretch;gap:0;padding:0;cursor:pointer;border-left:3px solid ${compact ? 'var(--sand)' : col};${compact ? 'opacity:0.75' : ''}`
+  card.className = `task-card ${compact?'stripe-dim':'stripe-'+(isRet?'return':'adopt')}${compact?' done':''}`
+  card.style.cssText = 'flex-direction:column;align-items:stretch;gap:0;padding:0;cursor:pointer'
+  if (compact) card.style.opacity = '0.75'
 
   // Top row
   const topRow = document.createElement('div')
   topRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:11px 12px 10px 13px'
-  topRow.onclick = () => { if (!compact) { _expandedEvent = isExpanded ? null : ev.id; rerender() } }
+  topRow.onclick = () => { if (!compact) { _expandedEvent = isExpanded?null:ev.id; rerender() } }
 
-  // Icon badge
   const iconEl = document.createElement('div')
   iconEl.style.cssText = `width:34px;height:34px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px`
-  iconEl.textContent = isReturn ? '↩' : '🐾'
+  iconEl.textContent = isRet ? '↩' : '🐾'
   topRow.appendChild(iconEl)
 
-  // Task body
   const taskBody = document.createElement('div')
   taskBody.className = 'task-body'
 
-  const taskName = document.createElement('div')
-  taskName.className = 'task-name'
-  taskName.textContent = ev.adopterName || 'Adopter'
-  taskBody.appendChild(taskName)
+  // Name
+  const nm = document.createElement('div')
+  nm.className = 'task-name'
+  nm.textContent = ev.adopterName || 'Adopter'
+  taskBody.appendChild(nm)
 
-  const taskMeta = document.createElement('div')
-  taskMeta.className = 'task-meta'
+  // Badges
+  const meta = document.createElement('div')
+  meta.className = 'task-meta'
   if (ev.time) {
-    const tb = document.createElement('span')
-    tb.className = 'badge quick'
-    tb.style.cssText = `background:${pale};color:${col};border-color:${border}`
-    tb.textContent = '🕐 ' + ev.time
-    taskMeta.appendChild(tb)
+    meta.innerHTML += `<span class="badge quick" style="background:${pale};color:${col};border-color:${border}">🕐 ${ev.time}</span>`
   }
-  if (ev.status === 'completed') {
-    const db = document.createElement('span'); db.className = 'badge delegate'; db.textContent = '✓ Done'; taskMeta.appendChild(db)
-  }
-  if (isReturn) {
-    const rb = document.createElement('span'); rb.className = 'badge solo'; rb.textContent = '↩ Return'; taskMeta.appendChild(rb)
-  } else {
-    const ab = document.createElement('span'); ab.className = 'badge delegate'; ab.textContent = '🐾 Adoption'; taskMeta.appendChild(ab)
-  }
-  if (ev.cats && ev.cats.length) {
-    const cb = document.createElement('span'); cb.className = 'badge tip'; cb.textContent = '🐱 ' + ev.cats.join(', '); taskMeta.appendChild(cb)
-  }
-  if (ev.notes) {
-    const nb = document.createElement('span')
-    nb.className = 'badge'
-    nb.style.cssText = 'background:var(--sand-light);color:var(--mid);border:1px solid var(--sand);font-style:italic'
-    nb.textContent = ev.notes
-    taskMeta.appendChild(nb)
-  }
-  taskBody.appendChild(taskMeta)
+  if (ev.status === 'completed') meta.innerHTML += `<span class="badge delegate">✓ Done</span>`
+  meta.innerHTML += isRet ? `<span class="badge solo">↩ Return</span>` : `<span class="badge delegate">🐾 Adoption</span>`
+  if (ev.cats && ev.cats.length) meta.innerHTML += `<span class="badge tip">🐱 ${ev.cats.join(', ')}</span>`
+  if (ev.notes) meta.innerHTML += `<span class="badge" style="background:var(--sand-light);color:var(--mid);border:1px solid var(--sand);font-style:italic">${ev.notes}</span>`
+  taskBody.appendChild(meta)
 
   // Progress bar
   if (!compact) {
@@ -1358,83 +1345,85 @@ function renderEventCard(ev, all, rerender, compact) {
     prog.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px'
     prog.innerHTML = `
       <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden">
-        <div style="height:100%;border-radius:999px;background:${col};width:${totalSteps > 0 ? doneSteps/totalSteps*100 : 0}%;transition:width .3s"></div>
+        <div style="height:100%;border-radius:999px;background:${col};width:${totalN>0?doneN/totalN*100:0}%;transition:width .3s"></div>
       </div>
-      <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneSteps}/${totalSteps}</span>`
+      <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneN}/${totalN}</span>`
     taskBody.appendChild(prog)
   }
   topRow.appendChild(taskBody)
 
-  // Action buttons (right, non-compact only)
+  // Action buttons
   if (!compact) {
     const acts = document.createElement('div')
     acts.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0'
     acts.onclick = e => e.stopPropagation()
-    acts.innerHTML = `<span style="font-size:14px;color:var(--light);transition:transform .2s;display:block;line-height:1;transform:${isExpanded ? 'rotate(180deg)' : 'none'}">⌄</span>`
+    const chevron = document.createElement('span')
+    chevron.style.cssText = `font-size:14px;color:var(--light);transition:transform .2s;display:block;line-height:1;transform:${isExpanded?'rotate(180deg)':'none'}`
+    chevron.textContent = '⌄'
+    acts.appendChild(chevron)
     const btnWrap = document.createElement('div')
     btnWrap.style.cssText = 'display:flex;gap:4px'
     if (ev.status === 'scheduled') {
-      const doneBtn = document.createElement('button')
-      doneBtn.style.cssText = `background:${col};color:white;border:none;border-radius:6px;padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit`
-      doneBtn.textContent = '✓'
-      doneBtn.onclick = () => _updateEvtStatus(ev.id, 'completed', all, rerender)
-      btnWrap.appendChild(doneBtn)
+      const dBtn = document.createElement('button')
+      dBtn.style.cssText = `background:${col};color:white;border:none;border-radius:6px;padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit`
+      dBtn.textContent = '✓'
+      dBtn.onclick = () => _updateEvtStatus(ev.id, 'completed', all, rerender)
+      btnWrap.appendChild(dBtn)
     }
-    const editBtn = document.createElement('button')
-    editBtn.style.cssText = `background:transparent;color:${col};border:1px solid ${border};border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit`
-    editBtn.textContent = '✎'
-    editBtn.onclick = () => showInlineEventEdit(card, ev, all, rerender)
-    const delBtn = document.createElement('button')
-    delBtn.style.cssText = 'background:transparent;color:var(--light);border:1px solid var(--sand-light);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit'
-    delBtn.textContent = '×'
-    delBtn.onclick = () => _deleteEvt(ev.id, all, rerender)
-    btnWrap.appendChild(editBtn)
-    btnWrap.appendChild(delBtn)
+    const eBtn = document.createElement('button')
+    eBtn.style.cssText = `background:transparent;color:${col};border:1px solid ${border};border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit`
+    eBtn.textContent = '✎'
+    eBtn.onclick = () => showInlineEventEdit(card, ev, all, rerender)
+    const xBtn = document.createElement('button')
+    xBtn.style.cssText = 'background:transparent;color:var(--light);border:1px solid var(--sand-light);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit'
+    xBtn.textContent = '×'
+    xBtn.onclick = () => _deleteEvt(ev.id, all, rerender)
+    btnWrap.appendChild(eBtn)
+    btnWrap.appendChild(xBtn)
     acts.appendChild(btnWrap)
     topRow.appendChild(acts)
   }
   card.appendChild(topRow)
 
-  // ── Expanded checklist ───────────────────────────────────
+  // Expanded checklist
   if (isExpanded) {
-    const sections = isReturn
-      ? [{label: null, items: RETURN_CHECKLIST}]
-      : [{label: 'BEFORE', items: ADOPTION_CHECKLIST.before},
-         {label: 'DURING — SHELTERLUV', items: ADOPTION_CHECKLIST.during},
-         {label: 'AFTER', items: ADOPTION_CHECKLIST.after}]
-
-    const clBody = document.createElement('div')
-    clBody.style.cssText = `border-top:1px solid ${border};padding:8px 10px 10px 12px;background:${pale};display:flex;flex-direction:column;gap:3px`
-
+    const sections = isRet
+      ? [{label:null, items:RETURN_CHECKLIST}]
+      : [{label:'BEFORE', items:ADOPTION_CHECKLIST.before},
+         {label:'DURING — SHELTERLUV', items:ADOPTION_CHECKLIST.during},
+         {label:'AFTER', items:ADOPTION_CHECKLIST.after}]
+    const clWrap = document.createElement('div')
+    clWrap.style.cssText = `border-top:1px solid ${border};padding:8px 10px 10px 12px;background:${pale}`
     sections.forEach(({label, items}) => {
       if (label) {
         const lbl = document.createElement('div')
         lbl.style.cssText = `font-size:9px;font-weight:700;color:${col};letter-spacing:.07em;padding:6px 4px 2px;opacity:.8`
         lbl.textContent = label
-        clBody.appendChild(lbl)
+        clWrap.appendChild(lbl)
       }
+      const list = document.createElement('div')
+      list.className = 'task-list'
       items.forEach(step => {
         const checked = !!done[step.id]
         const row = document.createElement('div')
-        row.className = 'task-card'
-        row.style.cssText = `background:${checked ? pale : 'var(--warm-white)'};border:1px solid ${checked ? col : 'var(--sand-light)'};border-left:3px solid ${checked ? col : 'var(--faint)'};padding:7px 10px;cursor:pointer;margin-bottom:0`
+        row.className = 'task-card ' + (checked ? 'stripe-' + (isRet?'return':'adopt') : 'no-stripe')
+        row.style.cssText = `background:${checked?pale:'var(--warm-white)'};padding:7px 10px;cursor:pointer;margin-bottom:0`
         row.onclick = () => {
-          const updated = [...all], idx = updated.findIndex(e => e.id === ev.id)
-          if (idx >= 0) { updated[idx] = {...updated[idx], checklist: {...done, [step.id]: !checked}}; saveEvents(updated); rerender() }
+          const updated=[...all]; const idx=updated.findIndex(e=>e.id===ev.id)
+          if(idx>=0){updated[idx]={...updated[idx],checklist:{...done,[step.id]:!checked}};saveEvents(updated);rerender()}
         }
         const cb = document.createElement('div')
         cb.className = 'task-checkbox'
-        cb.style.cssText = `background:${checked ? col : 'white'};border-color:${checked ? col : 'var(--sand)'}`
-        if (checked) cb.innerHTML = '<svg width="11" height="9" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-        const lbl = document.createElement('div')
-        lbl.className = 'task-body'
-        lbl.innerHTML = `<div class="task-name" style="font-size:.82rem;${checked ? 'text-decoration:line-through;color:var(--mid);opacity:.7' : ''}">${step.label}</div>`
-        row.appendChild(cb)
-        row.appendChild(lbl)
-        clBody.appendChild(row)
+        if (checked) { cb.style.cssText=`background:${col};border-color:${col}`; cb.innerHTML='<svg width="11" height="9" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' }
+        const lb = document.createElement('div')
+        lb.className = 'task-body'
+        lb.innerHTML = `<div class="task-name" style="font-size:.82rem;${checked?'text-decoration:line-through;color:var(--mid);opacity:.7':''}">${step.label}</div>`
+        row.appendChild(cb); row.appendChild(lb)
+        list.appendChild(row)
       })
+      clWrap.appendChild(list)
     })
-    card.appendChild(clBody)
+    card.appendChild(clWrap)
   }
   return card
 }
