@@ -1,4 +1,4 @@
-const CACHE = 'shelter-app-v41';
+const CACHE = 'shelter-app-v42';
 const ASSETS = [
   './index.html',
   './manifest.json',

@@ -1571,25 +1571,54 @@ function renderSmartSchedule(body, todayEvs) {
     return
   }
 
-  // Empty state or generate prompt
+  // Always show the generate UI with staffing picker
   const card = document.createElement('div')
   card.className = 'task-card stripe-amber'
   card.innerHTML = `<div class="task-body" style="padding-left:8px">
-    <div class="task-name">${hasAppts ? '🤖 Let AI plan your day around today\'s appointments' : '🌿 No appointments today — regular shift schedule'}</div>
-    <div class="task-meta" style="margin-top:8px">
-      ${hasAppts
-        ? `<button id="gen-schedule-btn" class="badge tip" style="cursor:pointer;border:none;font-family:inherit;padding:5px 14px;font-size:12px;font-weight:700">✨ Generate Smart Schedule</button>`
-        : `<span class="badge delegate">Cage cleaning 9–11 · Meds · Feeding · Laundry · Supplies</span>`}
+    <div class="task-name" style="margin-bottom:10px">
+      ${hasAppts ? '🤖 Generate a smart schedule around today\'s appointments' : '🌿 Generate a smart schedule for today\'s shift'}
     </div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">Who\'s working today?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="staff-opt" data-val="solo"
+          style="font-family:inherit;border:1.5px solid var(--terra);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:var(--terra)">
+          🙋 Just me
+        </button>
+        <button class="staff-opt" data-val="volunteer"
+          style="font-family:inherit;border:1.5px solid var(--sand);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:var(--mid)">
+          👥 Me + 1 volunteer
+        </button>
+        <button class="staff-opt" data-val="team"
+          style="font-family:inherit;border:1.5px solid var(--sand);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:var(--mid)">
+          👥👥 Me + 2+ volunteers
+        </button>
+      </div>
+    </div>
+    <button id="gen-schedule-btn" class="badge tip" style="cursor:pointer;border:none;font-family:inherit;padding:6px 16px;font-size:12px;font-weight:700">✨ Generate Smart Schedule</button>
   </div>`
   wrap.appendChild(card)
 
-  if (hasAppts) {
-    document.getElementById('gen-schedule-btn').onclick = () => _fetchSchedule(wrap, todayEvs)
-  }
+  // Staffing toggle logic
+  let _selectedStaff = 'solo'
+  wrap.querySelectorAll('.staff-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _selectedStaff = btn.dataset.val
+      wrap.querySelectorAll('.staff-opt').forEach(b => {
+        const active = b.dataset.val === _selectedStaff
+        b.style.background = active ? 'var(--terra)' : 'white'
+        b.style.color = active ? 'white' : (b.dataset.val === 'solo' ? 'var(--terra)' : 'var(--mid)')
+        b.style.borderColor = active ? 'var(--terra)' : 'var(--sand)'
+      })
+    })
+  })
+  // Default select solo
+  wrap.querySelector('[data-val="solo"]').click()
+
+  document.getElementById('gen-schedule-btn').onclick = () => _fetchSchedule(wrap, todayEvs, _selectedStaff)
 }
 
-async function _fetchSchedule(wrap, todayEvs) {
+async function _fetchSchedule(wrap, todayEvs, staffing) {
   wrap.innerHTML = `<div class="task-card stripe-amber"><div class="task-body" style="padding-left:8px">
     <div class="task-name">🤖 Building your schedule…</div>
     <div class="task-meta"><span class="badge tip">This takes a few seconds</span></div>
@@ -1599,29 +1628,50 @@ async function _fetchSchedule(wrap, todayEvs) {
     `- ${ev.time||'?'}: ${ev.adopterName} (${ev.type})${ev.cats&&ev.cats.length?' — cats: '+ev.cats.join(', '):''}${ev.notes?' — note: '+ev.notes:''}`
   ).join('\n')
 
-  const prompt = `You are a scheduling assistant for a cat shelter kennel technician working 9 AM–5 PM.
+  const staffingCtx = {
+    solo:      'The kennel tech is working ALONE today with no volunteers. Cage cleaning across 6 rooms takes the full 9–11 AM window solo. Be conservative with timing — everything takes longer alone.',
+    volunteer: 'The kennel tech has ONE volunteer helping today. Cage cleaning can be split between them, finishing in about 60–75 min instead of 2 hours. The volunteer can help with feeding and litter checks but cannot give medications.',
+    team:      'The kennel tech has TWO OR MORE volunteers today. Cage cleaning can be completed in ~45–60 min with the team. Volunteers can be delegated feeding and litter checks, freeing the tech for other tasks.',
+  }[staffing || 'solo']
 
-Their fixed daily duties are:
-- 9:00 AM: Give AM medications (solo, ~20 min)
-- 9:00–11:00 AM: Cage cleaning across 6 rooms (with volunteers)
-- 12:00 PM: Give wet food + do dishes (~45 min, solo)
-- 3:00–3:30 PM: Give PM medications (solo)
+  const apptCtx = todayEvs.length > 0
+    ? `Today's appointments:\n${todayEvs.map(ev =>
+        `- ${ev.time||'time TBD'}: ${ev.adopterName} (${ev.type})${ev.cats&&ev.cats.length?' — '+ev.cats.join(', '):''}${ev.notes?' — '+ev.notes:''}`
+      ).join('\n')}`
+    : 'No adoption or return appointments today — this is a regular duties-only shift.'
+
+  const prompt = `You are a scheduling assistant for a cat shelter kennel technician working 9 AM–5 PM Monday–Saturday.
+
+STAFFING TODAY: ${staffingCtx}
+
+FIXED DAILY DUTIES:
+- 9:00 AM: AM medications — tech only, cannot be delegated (~20 min)
+- 9:00–11:00 AM: Cage cleaning across 6 rooms (time varies by staffing — see above)
+- 12:00 PM: Wet food + dishes (~45 min, tech only)
+- 3:00–3:30 PM: PM medications — tech only, cannot be delegated (~30 min)
 - 4:30 PM: Set up cart for next day (~20 min)
-- Laundry runs throughout day (start loads when free)
-- Feeding and litter checks between tasks
+- Laundry: runs throughout the day whenever the tech has a free 5 minutes to swap loads
+- Feeding and litter checks: ongoing between other tasks
 
-Today's adoption/return appointments at JCAC:
-${apptLines}
+APPOINTMENT CONTEXT (if any today):
+${apptCtx}
 
-Each adoption appointment takes about 45–75 minutes. Returns take about 20–30 min.
+IMPORTANT NOTES ABOUT APPOINTMENTS:
+- Each adoption appointment lasts about 60 minutes total but the tech does NOT need to stay with the adopter the entire time
+- Typical flow: greet adopter (5 min) → bring them to meet cat (10 min) → leave them alone together while tech does other tasks → return to complete paperwork (15 min)
+- This means an appointment can OVERLAP with other duties — the tech can start cage cleaning or give meds while the adopter bonds with the cat
+- Return/reclaim appointments are shorter (~20–30 min) and require more direct attention
+- Flag any appointment times that conflict with medications (those cannot be moved or delegated)
 
-Create a practical minute-by-minute schedule for the full day (9 AM–5 PM) that:
-1. Fits all appointments without missing any duties
-2. Flags any tight spots or things to watch out for
-3. Suggests when to run laundry loads
+Create a practical schedule for the full shift (9 AM–5 PM) that:
+1. Accounts for today's staffing level
+2. Overlaps appointment bonding time with other duties where possible
+3. Never misses medications
+4. Suggests when to start laundry loads
+5. Flags any genuinely tight or stressful windows
 
-Respond ONLY with a JSON array, no markdown, no explanation. Each item:
-{"time":"9:00 AM","label":"Give AM meds","type":"duty","note":"Do before cage cleaning starts"}
+Respond ONLY with a valid JSON array. No markdown fences, no explanation, just the array. Each item:
+{"time":"9:00 AM","label":"Give AM meds","type":"duty","note":"Cannot be delegated — do this first"}
 
 Types: "duty", "appointment", "laundry", "warning", "free"`
 
