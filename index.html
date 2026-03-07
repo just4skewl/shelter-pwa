@@ -963,13 +963,21 @@ async function _gsSyncNow() {
   _gSyncing = true
   _gsUpdateUI('syncing')
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${GSHEETS_SHEET_ID}/export?format=csv&gid=0`
+    // Use Sheets API v4 — works reliably with Bearer token (no redirect issues)
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${GSHEETS_SHEET_ID}/values/A1:Z2000?majorDimension=ROWS`
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${t.access_token}` }
     })
     if (resp.status === 401) { _gsClearToken(); _gsUpdateUI(); _gSyncing = false; return }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const csvText = await resp.text()
+    if (!resp.ok) {
+      const errText = await resp.text()
+      console.warn('Sheets API error:', resp.status, errText.slice(0,200))
+      if (resp.status === 403) throw new Error('Sheets API not enabled — see instructions')
+      throw new Error(`HTTP ${resp.status}`)
+    }
+    const json = await resp.json()
+    const csvText = _sheetsJsonToCsv(json)
+    console.log('[GSheets] fetched', json.values?.length, 'rows, CSV length:', csvText.length)
     _gsAutoImport(csvText)
     _gsSaveLastSync()
     _gSyncing = false
@@ -979,6 +987,22 @@ async function _gsSyncNow() {
     _gSyncing = false
     _gsUpdateUI('error')
   }
+}
+
+
+// Convert Sheets API v4 JSON response to CSV text for reuse with _parseCSV
+function _sheetsJsonToCsv(json) {
+  const rows = json.values || []
+  if (!rows.length) return ''
+  return rows.map(row =>
+    row.map(cell => {
+      const s = String(cell ?? '')
+      // Quote cells containing comma, newline or quote
+      return (s.includes(',') || s.includes('\n') || s.includes('"'))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s
+    }).join(',')
+  ).join('\n')
 }
 
 // Auto-import CSV text — merges new events without showing UI
@@ -1004,6 +1028,10 @@ function _gsAutoImport(csvText) {
     const jcacRows = locCol
       ? withDates.filter(r => (r[locCol] || '').toLowerCase().includes('jcac'))
       : withDates
+
+    console.log('[GSheets] headers:', headers.join(' | '))
+    console.log('[GSheets] total rows:', rows.length, '| JCAC rows:', jcacRows.length)
+    console.log('[GSheets] dateCol:', dateCol, '| adopterCol:', adopterCol, '| locCol:', locCol)
 
     const built = []
     jcacRows.forEach(r => {
@@ -1044,6 +1072,7 @@ function _gsAutoImport(csvText) {
       }
     })
 
+    console.log('[GSheets] built events:', built.length)
     const existing = loadEvents()
     // Dedup: keep existing checklist progress; add only genuinely new events
     const deduped = built.filter(n =>
@@ -1054,6 +1083,7 @@ function _gsAutoImport(csvText) {
     const kept = existing.filter(ex =>
       ex.importedFrom !== 'sheets' || sheetsKeys.has(`${ex.adopterName}|${ex.date}|${ex.time}`)
     )
+    console.log('[GSheets] deduped (new):', deduped.length, '| kept:', kept.length)
     if (deduped.length > 0 || kept.length !== existing.length) {
       saveEvents([...kept, ...deduped])
       renderToday()
