@@ -930,6 +930,8 @@ function _gsInitClient() {
         expires_at: Date.now() + (resp.expires_in || 3600) * 1000
       }
       _gsSaveToken(_gToken)
+      console.log('[GSheets] token received, expires in', resp.expires_in, 's')
+      _gsToast('🔗 Connected! Syncing…', '#7a5090')
       _gsUpdateUI()
       _gsSyncNow()
     }
@@ -978,14 +980,19 @@ async function _gsSyncNow() {
     const json = await resp.json()
     const csvText = _sheetsJsonToCsv(json)
     console.log('[GSheets] fetched', json.values?.length, 'rows, CSV length:', csvText.length)
-    _gsAutoImport(csvText)
+    console.log('[GSheets] fetched', json.values?.length, 'rows, CSV length:', csvText.length)
+    if (csvText.length < 50) console.warn('[GSheets] CSV suspiciously short:', csvText)
+    else console.log('[GSheets] first row:', csvText.split('\n')[0])
+    const result = _gsAutoImport(csvText)
     _gsSaveLastSync()
     _gSyncing = false
     _gsUpdateUI('ok')
+    _gsToast(result || '✓ Sheet synced', '#4a8a5a')
   } catch(e) {
     console.warn('Sheets sync error:', e.message)
     _gSyncing = false
     _gsUpdateUI('error')
+    _gsToast('⚠️ ' + e.message, '#c97b5a')
   }
 }
 
@@ -1088,9 +1095,12 @@ function _gsAutoImport(csvText) {
       saveEvents([...kept, ...deduped])
       renderToday()
       if (typeof renderAdoptionsTab === 'function') renderAdoptionsTab()
+      return `✓ ${deduped.length} new appointment${deduped.length !== 1 ? 's' : ''} imported`
     }
+    return built.length ? `✓ Up to date (${built.length} appointments)` : '✓ Sheet synced (0 appointments found)'
   } catch(e) {
     console.warn('Auto-import error:', e.message)
+    return '⚠️ Parse error: ' + e.message
   }
 }
 
@@ -1141,6 +1151,23 @@ function _gsBindDisconnect() {
   })
   btn.addEventListener('touchend', () => clearTimeout(timer))
   btn.addEventListener('touchmove', () => clearTimeout(timer))
+}
+
+function _gsToast(msg, color) {
+  // Show a brief notification at the top of the adoptions section
+  let toast = document.getElementById('gs-toast')
+  if (!toast) {
+    toast = document.createElement('div')
+    toast.id = 'gs-toast'
+    toast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;padding:9px 18px;border-radius:20px;font-size:12px;font-weight:700;font-family:inherit;box-shadow:0 2px 12px rgba(0,0,0,0.18);transition:opacity 0.4s;white-space:nowrap'
+    document.body.appendChild(toast)
+  }
+  toast.textContent = msg
+  toast.style.background = color || '#3a3530'
+  toast.style.color = 'white'
+  toast.style.opacity = '1'
+  clearTimeout(toast._timer)
+  toast._timer = setTimeout(() => { toast.style.opacity = '0' }, 3500)
 }
 
 function _gsAgo(isoStr) {
