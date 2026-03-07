@@ -205,6 +205,15 @@ body {
 }
 .task-card-list.stripe-sage  { border-left: 4px solid var(--sage); }
 .task-card-list.stripe-purple { border-left: 4px solid #7a5090; }
+.task-card-list.stripe-blue   { border-left: 4px solid #5a7a9a; }
+.stripe-blue   { border-left: 4px solid #5a7a9a; }
+.section-label.blue { color: #5a7a9a; }
+.section-label.blue::after { background: linear-gradient(to right, #a8c0d8, transparent); }
+.shadow-tag {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 999px; white-space: nowrap; letter-spacing: .03em;
+}
 .task-card::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0;
   width: 3px; background: var(--faint); transition: background 0.2s;
@@ -835,6 +844,7 @@ function _fbPullAll() {
     [_countersKey(),           `shelter/daily/${d}/counters`],
     [_extraKey(),              `shelter/daily/${d}/extra`],
     ['shelter_notes',          'shelter/notes'],
+    ['shelter_shadow_notes',    'shelter/shadow_notes'],
   ]
   let pending = paths.length
   const done = () => { if (--pending === 0) _fbOnPullComplete() }
@@ -884,6 +894,7 @@ function _fbAttachListeners() {
   listen(`shelter/daily/${d}/counters`, _countersKey(),      () => { renderCounters(); dUpdateProgress() })
   listen(`shelter/daily/${d}/extra`,    _extraKey(),         () => renderExtraSection())
     listen('shelter/notes',               'shelter_notes',           () => { renderNotesList(document.getElementById('notes-area-wrap')?.parentElement || document.body) })
+    listen('shelter/shadow_notes',         'shelter_shadow_notes',    () => { if(document.getElementById('shadow-notes-list')) renderShadowNotesList() })
 }
 
 
@@ -1845,12 +1856,13 @@ function renderAdoptionsTab(){
         <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 11px;font-size:15px;cursor:pointer;font-family:inherit;flex-shrink:0">🖨️</button>
       </div>
       <div class="d-tabs">
-        <button class="d-tab-btn${isAdopt?' active':''}" onclick="_apptTab='adoptions';_expandedEvent=null;renderAdoptionsTab()">🐾 Adoptions</button>
-        <button class="d-tab-btn${!isAdopt?' active':''}" onclick="_apptTab='returns';_expandedEvent=null;renderAdoptionsTab()">↩ Returns</button>
+        <button class="d-tab-btn${_apptTab==='adoptions'?' active':''}" onclick="_apptTab='adoptions';_expandedEvent=null;renderAdoptionsTab()">🐾 Adoptions</button>
+        <button class="d-tab-btn${_apptTab==='returns'?' active':''}" onclick="_apptTab='returns';_expandedEvent=null;renderAdoptionsTab()">↩ Returns</button>
+        <button class="d-tab-btn${_apptTab==='shadow'?' active':''}" onclick="_apptTab='shadow';renderAdoptionsTab()">📝 My Notes</button>
       </div>`
     // Fix active color since header isn't terra
     hdr.querySelectorAll('.d-tab-btn.active').forEach(btn => {
-      btn.style.color = accentColor
+      btn.style.color = _apptTab === 'shadow' ? '#5a7a9a' : accentColor
     })
     root.appendChild(hdr)
     setTimeout(() => { _gsUpdateUI(); _gsBindDisconnect() }, 50)
@@ -1859,6 +1871,13 @@ function renderAdoptionsTab(){
     body.className = 'duties-body tab-body-anim'
     body.style.paddingBottom = '88px'
     root.appendChild(body)
+
+    // ── Shadow / My Notes tab ─────────────────────────────────
+    if (_apptTab === 'shadow') {
+      renderShadowNotesTab(body, accentColor)
+      if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
+      return
+    }
 
     // ── Action buttons ────────────────────────────────────────
     const btnRow = document.createElement('div')
@@ -2719,6 +2738,8 @@ function dSwitchTab(id, btn) {
 
 function _extraKey(){ return 'shelter_extra_'+todayDateStr() }
 function _notesKey(){ return 'shelter_notes' }
+function loadShadowNotes(){ try{return JSON.parse(localStorage.getItem('shelter_shadow_notes')||'[]')}catch{return []} }
+function saveShadowNotes(arr){ try{localStorage.setItem('shelter_shadow_notes',JSON.stringify(arr))}catch{} _fbSet('shelter/shadow_notes', arr) }
 function loadExtraTasks(){ try{return JSON.parse(localStorage.getItem(_extraKey())||'[]')}catch{return []} }
 function saveExtraTasks(arr){ try{localStorage.setItem(_extraKey(),JSON.stringify(arr))}catch{} _fbSet('shelter/daily/'+todayDateStr()+'/extra', arr) }
 function loadNotes(){ try{return JSON.parse(localStorage.getItem(_notesKey())||'[]')}catch{return []} }
@@ -3458,6 +3479,322 @@ renderLaundry()
 renderCounters()
 dUpdateProgress()
 renderExtraSection()
+
+// ═══════════════════════════════════════════════════════════════
+// SHADOW NOTES — Adoption observation notes with AI summarizer
+// ═══════════════════════════════════════════════════════════════
+
+const SHADOW_TAGS = [
+  { id: 'question',  label: '❓ Question Asked',  bg: '#eceaf5', color: '#7a5090' },
+  { id: 'process',   label: '📋 Process Step',    bg: '#edf5ef', color: '#3a7a50' },
+  { id: 'paperwork', label: '📄 Paperwork',        bg: '#fdf7e8', color: '#8a6020' },
+  { id: 'redflag',   label: '🚩 Red Flag',         bg: '#fdf3ef', color: '#c94040' },
+  { id: 'goodtoknow',label: '💡 Good to Know',     bg: '#e8f0fa', color: '#3a5a9a' },
+  { id: 'followup',  label: '🔁 Follow Up',        bg: '#fdf0f3', color: '#b04060' },
+]
+
+function getShadowTagInfo(id) {
+  return SHADOW_TAGS.find(t => t.id === id) || { label: '📝 Note', bg: '#f5f0e8', color: '#7a6e65' }
+}
+
+function renderShadowTagBadge(tagId) {
+  const t = getShadowTagInfo(tagId)
+  const span = document.createElement('span')
+  span.className = 'shadow-tag'
+  span.style.background = t.bg
+  span.style.color = t.color
+  span.textContent = t.label
+  return span
+}
+
+function renderShadowNotesList() {
+  const list = document.getElementById('shadow-notes-list')
+  if (!list) return
+  list.innerHTML = ''
+  const notes = loadShadowNotes()
+  if (!notes.length) {
+    const empty = _el('div', { className: 'task-card' })
+    empty.innerHTML = '<div class="task-body" style="padding-left:8px;color:var(--light);font-style:italic;font-size:13px;text-align:center">No notes yet — tap + Add Note to start</div>'
+    list.appendChild(empty)
+    return
+  }
+  notes.forEach((note, i) => {
+    const card = _el('div', { className: 'task-card stripe-blue' })
+    card.style.marginBottom = '8px'
+    card.style.flexDirection = 'column'
+    card.style.alignItems = 'stretch'
+    card.style.cursor = 'default'
+
+    // Top row: tag badge + timestamp + action buttons
+    const topRow = _el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px' } })
+    topRow.appendChild(renderShadowTagBadge(note.tag))
+    const ts = _el('span', { style: { fontSize: '10.5px', color: 'var(--light)', marginLeft: 'auto', flexShrink: '0', alignSelf: 'center' } })
+    ts.textContent = note.date ? (note.date === todayDateStr() ? 'Today' : fmtShortDate(note.date)) + (note.time ? ' · ' + note.time : '') : ''
+    topRow.appendChild(ts)
+    // Edit & delete buttons
+    const actions = _el('div', { style: { display: 'flex', gap: '4px', flexShrink: '0' } })
+    const editBtn = _el('button', { style: { background: 'transparent', border: '1px solid var(--sand)', color: 'var(--mid)', borderRadius: '5px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' } })
+    editBtn.textContent = '✎'
+    editBtn.onclick = (e) => { e.stopPropagation(); showEditShadowNote(i) }
+    const delBtn = _el('button', { style: { background: 'transparent', border: 'none', color: 'var(--light)', fontSize: '16px', cursor: 'pointer', padding: '2px 6px', lineHeight: '1' } })
+    delBtn.textContent = '×'
+    delBtn.onclick = (e) => {
+      e.stopPropagation()
+      if (!confirm('Delete this note?')) return
+      const arr = loadShadowNotes(); arr.splice(i, 1); saveShadowNotes(arr)
+      renderShadowNotesList()
+    }
+    actions.appendChild(editBtn); actions.appendChild(delBtn)
+    topRow.appendChild(actions)
+    card.appendChild(topRow)
+
+    // Note text
+    const txt = _el('div', { style: { fontSize: '13px', color: 'var(--ink)', lineHeight: '1.55', whiteSpace: 'pre-wrap' } })
+    txt.textContent = note.text
+    card.appendChild(txt)
+    list.appendChild(card)
+  })
+}
+
+function showAddShadowNoteForm(container) {
+  const existing = document.getElementById('shadow-note-form')
+  if (existing) { existing.remove(); return }
+  const form = _el('div', { id: 'shadow-note-form' })
+  form.style.cssText = 'background:white;border:1.5px solid #a8c0d8;border-radius:12px;padding:14px;margin-bottom:12px;'
+
+  // Tag picker
+  const tagLabel = _el('div', { style: { fontSize: '11px', fontWeight: '700', color: 'var(--mid)', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '.04em' } })
+  tagLabel.textContent = 'Category'
+  form.appendChild(tagLabel)
+  const tagRow = _el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' } })
+  let selectedTag = 'question'
+  const tagBtns = {}
+  SHADOW_TAGS.forEach(t => {
+    const btn = _el('button', { style: { border: '1.5px solid ' + t.color + '55', borderRadius: '999px', padding: '3px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s', background: t.bg, color: t.color } })
+    btn.textContent = t.label
+    tagBtns[t.id] = btn
+    btn.onclick = () => {
+      selectedTag = t.id
+      Object.entries(tagBtns).forEach(([id, b]) => {
+        const ti = getShadowTagInfo(id)
+        b.style.outline = id === selectedTag ? '2px solid ' + ti.color : 'none'
+        b.style.fontWeight = id === selectedTag ? '800' : '600'
+      })
+    }
+    tagRow.appendChild(btn)
+  })
+  // Pre-select first tag visually
+  tagBtns['question'].style.outline = '2px solid #7a5090'
+  tagBtns['question'].style.fontWeight = '800'
+  form.appendChild(tagRow)
+
+  // Textarea
+  const ta = _el('textarea', { id: 'shadow-note-text', rows: 3, placeholder: 'Write your observation or note...' })
+  ta.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid #a8c0d8;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none;margin-bottom:9px;line-height:1.5;'
+  form.appendChild(ta)
+
+  // Buttons
+  const btnRow = _el('div', { style: { display: 'flex', gap: '7px' } })
+  const saveBtn = _el('button', { style: { flex: '1', background: '#5a7a9a', color: 'white', border: 'none', borderRadius: '8px', padding: '9px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' } })
+  saveBtn.textContent = '💾 Save Note'
+  saveBtn.onclick = () => {
+    const text = ta.value.trim()
+    if (!text) { ta.focus(); return }
+    const now = new Date()
+    const arr = loadShadowNotes()
+    arr.unshift({ id: 'sn' + Date.now(), text, tag: selectedTag, date: todayDateStr(), time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+    saveShadowNotes(arr)
+    form.remove()
+    renderShadowNotesList()
+  }
+  const cancelBtn = _el('button', { style: { background: 'transparent', border: '1.5px solid var(--sand-dark)', borderRadius: '8px', padding: '9px 14px', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--mid)' } })
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.onclick = () => form.remove()
+  btnRow.appendChild(saveBtn); btnRow.appendChild(cancelBtn)
+  form.appendChild(btnRow)
+
+  container.insertBefore(form, container.firstChild)
+  ta.focus()
+}
+
+function showEditShadowNote(i) {
+  const notes = loadShadowNotes()
+  const note = notes[i]
+  const list = document.getElementById('shadow-notes-list')
+  if (!list) return
+  const existing = document.getElementById('shadow-edit-form')
+  if (existing) existing.remove()
+
+  const form = _el('div', { id: 'shadow-edit-form' })
+  form.style.cssText = 'background:white;border:1.5px solid #a8c0d8;border-radius:12px;padding:14px;margin-bottom:8px;'
+
+  // Tag picker
+  const tagRow = _el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' } })
+  let selectedTag = note.tag || 'question'
+  const tagBtns = {}
+  SHADOW_TAGS.forEach(t => {
+    const btn = _el('button', { style: { border: '1.5px solid ' + t.color + '55', borderRadius: '999px', padding: '3px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s', background: t.bg, color: t.color } })
+    btn.textContent = t.label
+    tagBtns[t.id] = btn
+    if (t.id === selectedTag) { btn.style.outline = '2px solid ' + t.color; btn.style.fontWeight = '800' }
+    btn.onclick = () => {
+      selectedTag = t.id
+      Object.entries(tagBtns).forEach(([id, b]) => {
+        const ti = getShadowTagInfo(id)
+        b.style.outline = id === selectedTag ? '2px solid ' + ti.color : 'none'
+        b.style.fontWeight = id === selectedTag ? '800' : '600'
+      })
+    }
+    tagRow.appendChild(btn)
+  })
+  form.appendChild(tagRow)
+
+  const ta = _el('textarea', { rows: 3 })
+  ta.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid #a8c0d8;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none;margin-bottom:9px;line-height:1.5;'
+  ta.value = note.text
+  form.appendChild(ta)
+
+  const btnRow = _el('div', { style: { display: 'flex', gap: '7px' } })
+  const saveBtn = _el('button', { style: { flex: '1', background: '#5a7a9a', color: 'white', border: 'none', borderRadius: '8px', padding: '9px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' } })
+  saveBtn.textContent = '💾 Save'
+  saveBtn.onclick = () => {
+    const text = ta.value.trim()
+    if (!text) return
+    const arr = loadShadowNotes()
+    arr[i] = { ...arr[i], text, tag: selectedTag }
+    saveShadowNotes(arr)
+    form.remove()
+    renderShadowNotesList()
+  }
+  const cancelBtn = _el('button', { style: { background: 'transparent', border: '1.5px solid var(--sand-dark)', borderRadius: '8px', padding: '9px 14px', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--mid)' } })
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.onclick = () => form.remove()
+  btnRow.appendChild(saveBtn); btnRow.appendChild(cancelBtn)
+  form.appendChild(btnRow)
+
+  list.insertBefore(form, list.firstChild)
+  ta.focus()
+}
+
+async function showShadowAISummary(btn) {
+  const notes = loadShadowNotes()
+  if (!notes.length) { alert('No notes to summarize yet!'); return }
+  const existing = document.getElementById('shadow-ai-summary')
+  if (existing) { existing.remove(); return }
+
+  btn.disabled = true; btn.textContent = '✨ Thinking...'
+  const notesText = notes.map((n, i) => {
+    const tag = getShadowTagInfo(n.tag)
+    return `[${tag.label.replace(/^[^ ]+ /, '')}] ${n.text}`
+  }).join('\n')
+
+  try {
+    const data = await _claudeAPI({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      messages: [{ role: 'user', content: `You are helping a new cat shelter kennel technician who is shadowing an adoption counselor. Below are their raw observation notes. Create a clear, organized cheat sheet they can reference when doing adoptions on their own.
+
+Format your response with these sections (only include sections that have relevant notes):
+## Questions to Ask Adopters
+## Process Steps (in order)
+## Paperwork & What to Complete  
+## Red Flags to Watch For
+## Good to Know / Tips
+## Follow-Up Items
+
+Keep each point concise and practical. Write in second person ("You should...", "Ask them...").
+
+Raw notes:
+${notesText}` }]
+    })
+    const text = (data.content || []).find(b => b.type === 'text')?.text || 'Could not generate summary.'
+
+    const summaryDiv = _el('div', { id: 'shadow-ai-summary' })
+    summaryDiv.style.cssText = 'background:white;border:1.5px solid #a8c0d8;border-radius:12px;padding:16px 16px 12px;margin-top:12px;'
+    const summaryHeader = _el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' } })
+    summaryHeader.innerHTML = '<span style="font-size:18px">✨</span><span style="font-weight:800;font-size:14px;color:#5a7a9a">AI Cheat Sheet</span>'
+    const closeBtn = _el('button', { style: { marginLeft: 'auto', background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--light)', lineHeight: '1' } })
+    closeBtn.textContent = '×'; closeBtn.onclick = () => summaryDiv.remove()
+    summaryHeader.appendChild(closeBtn)
+    summaryDiv.appendChild(summaryHeader)
+
+    // Render markdown-style sections
+    const content = _el('div', { style: { fontSize: '12.5px', lineHeight: '1.65', color: 'var(--ink)' } })
+    text.split('\n').forEach(line => {
+      const p = _el('div')
+      if (line.startsWith('## ')) {
+        p.style.cssText = 'font-weight:800;font-size:13px;color:#5a7a9a;margin:12px 0 5px;padding-top:8px;border-top:1px solid var(--sand-light);'
+        p.textContent = line.replace('## ', '')
+      } else if (line.startsWith('- ') || line.startsWith('• ')) {
+        p.style.cssText = 'padding-left:14px;position:relative;margin-bottom:3px;'
+        p.innerHTML = '<span style="position:absolute;left:2px;color:#5a7a9a">•</span>' + line.slice(2)
+      } else if (line.trim()) {
+        p.style.cssText = 'margin-bottom:3px;'
+        p.textContent = line
+      }
+      content.appendChild(p)
+    })
+    summaryDiv.appendChild(content)
+
+    // Add to page after the list
+    const list = document.getElementById('shadow-notes-list')
+    if (list) list.parentElement.appendChild(summaryDiv)
+    else btn.parentElement.appendChild(summaryDiv)
+  } catch(err) {
+    alert('Could not generate summary: ' + err.message)
+  } finally {
+    btn.disabled = false; btn.textContent = '✨ Summarize with AI'
+  }
+}
+
+function fmtShortDate(d) {
+  try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+  catch { return d }
+}
+
+function renderShadowNotesTab(body, accentColor) {
+  // ── Top action bar ─────────────────────────────────────────
+  const topBar = _el('div', { style: { display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' } })
+
+  const addBtn = _el('button', { style: { background: '#5a7a9a', color: 'white', border: 'none', borderRadius: '10px', padding: '9px 16px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px' } })
+  addBtn.innerHTML = '<span style="font-size:15px">+</span> Add Note'
+  addBtn.onclick = () => showAddShadowNoteForm(notesContainer)
+
+  const aiBtn = _el('button', { id: 'shadow-ai-btn', style: { background: 'white', color: '#7a5090', border: '1.5px solid #c8aae0', borderRadius: '10px', padding: '9px 14px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', marginLeft: 'auto' } })
+  aiBtn.innerHTML = '<span>✨</span> Summarize with AI'
+  aiBtn.onclick = () => showShadowAISummary(aiBtn)
+
+  topBar.appendChild(addBtn); topBar.appendChild(aiBtn)
+  body.appendChild(topBar)
+
+  // ── Notes count label ──────────────────────────────────────
+  const notes = loadShadowNotes()
+  const sl = _el('div', { className: 'section-label blue' })
+  sl.textContent = notes.length ? `${notes.length} observation note${notes.length !== 1 ? 's' : ''}` : 'Observation Notes'
+  body.appendChild(sl)
+
+  // ── Notes container ────────────────────────────────────────
+  const notesContainer = _el('div')
+  const list = _el('div', { id: 'shadow-notes-list' })
+  notesContainer.appendChild(list)
+  body.appendChild(notesContainer)
+
+  renderShadowNotesList()
+
+  // ── Tag legend ─────────────────────────────────────────────
+  const legend = _el('div', { style: { marginTop: '18px', padding: '12px 14px', background: 'white', border: '1px solid var(--sand-light)', borderRadius: '10px' } })
+  const legendTitle = _el('div', { style: { fontSize: '10px', fontWeight: '700', color: 'var(--light)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '8px' } })
+  legendTitle.textContent = 'Note Categories'
+  legend.appendChild(legendTitle)
+  const legendGrid = _el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '5px' } })
+  SHADOW_TAGS.forEach(t => {
+    const chip = _el('span', { className: 'shadow-tag', style: { background: t.bg, color: t.color } })
+    chip.textContent = t.label
+    legendGrid.appendChild(chip)
+  })
+  legend.appendChild(legendGrid)
+  body.appendChild(legend)
+}
 
 // Initialize Firebase sync after all functions are defined
 // (runs async, app is already usable from localStorage)
