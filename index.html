@@ -312,6 +312,41 @@ body {
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 99px; }
+
+/* ── Section label color variants ───────────────────────── */
+.section-label.purple { color: #7a5090; }
+.section-label.purple::after { background: linear-gradient(to right, #c8aae0, transparent); }
+.section-label.sage   { color: var(--sage); }
+.section-label.sage::after { background: linear-gradient(to right, var(--sage-light), transparent); }
+.section-label.amber  { color: var(--amber); }
+.section-label.amber::after { background: linear-gradient(to right, #f0d49a, transparent); }
+.section-label.rose   { color: #b05070; }
+.section-label.rose::after { background: linear-gradient(to right, #e8b4c4, transparent); }
+
+/* ── Adoption/return stripe variants ─────────────────────── */
+.stripe-purple::before { background: #7a5090; }
+.stripe-rose::before   { background: #b05070; }
+.stripe-move::before   { background: #7a6030; }
+
+/* ── Stat card layout variant ────────────────────────────── */
+.task-card.card-stat { cursor: pointer; }
+.task-card.card-stat:active { transform: scale(0.97); }
+
+/* ── AI Schedule timeline ─────────────────────────────────── */
+.schedule-wrap { background: var(--warm-white); border: 1.5px solid var(--sand-light); border-radius: 14px; overflow: hidden; margin-bottom: 20px; position: relative; }
+.schedule-wrap::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--terra); }
+.schedule-item { display: flex; gap: 12px; padding: 10px 14px 10px 18px; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+.schedule-item:last-child { border-bottom: none; }
+.schedule-time { font-size: 11px; font-weight: 700; color: var(--mid); min-width: 52px; padding-top: 2px; flex-shrink: 0; }
+.schedule-dot  { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.schedule-label { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.schedule-note  { font-size: 11px; color: var(--mid); margin-top: 2px; line-height: 1.4; }
+
+/* ── Appt mini-card in Today ──────────────────────────────── */
+.appt-mini { display:flex; align-items:center; gap:10; padding:10px 14px 10px 18px; border-bottom:1px solid var(--faint); cursor:pointer; }
+.appt-mini:last-child { border-bottom:none; }
+.appt-mini:active { background: var(--cream); }
+
 </style>
 </head>
 <body>
@@ -975,228 +1010,325 @@ function _el(tag,attrs,...children){
 // ═══════════════════════════════════════════════════
 
 function renderToday() {
-  const root=document.getElementById('today-root')
-  if(!root)return
-  root.innerHTML=''
-  try{
-    const events=loadEvents()
-    const todayEvs=events.filter(a=>a.date===todayDateStr()).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const conflicts=detectConflicts(events)
-    const meds=getMedsDueSummary()
-    const tasks=getTaskProgress()
-    const now=new Date(), hour=now.getHours()
-    const greeting=hour<12?'Good morning ☀️':hour<17?'Good afternoon 🌿':'Good evening 🌙'
-    const dateStr=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+  const root = document.getElementById('today-root')
+  if (!root) return
+  root.innerHTML = ''
+  try {
+    const events   = loadEvents()
+    const todayEvs = events.filter(a => a.date === todayDateStr()).sort((a,b) => _parseTime(a.time) - _parseTime(b.time))
+    const meds     = getMedsDueSummary()
+    const tasks    = getTaskProgress()
+    const now      = new Date(), hour = now.getHours()
+    const greeting = hour < 12 ? 'Good morning ☀️' : hour < 17 ? 'Good afternoon 🌿' : 'Good evening 🌙'
+    const dateStr  = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'})
 
-    // ── Header (matches Duties warm terracotta style) ──
-    const hdr=_el('div',{style:{background:'var(--terra)',padding:'16px 18px 18px',position:'sticky',
-      top:0,zIndex:20,boxShadow:'0 2px 12px rgba(201,123,90,0.3)'}},
-      _el('div',{style:{display:'flex',alignItems:'center',gap:12}},
-        _el('span',{style:{fontSize:26}},'🏠'),
-        _el('div',{style:{flex:1}},
-          _el('div',{style:{display:'flex',alignItems:'center',gap:7}},
-            _el('div',{style:{color:'white',fontWeight:800,fontSize:18,letterSpacing:'-0.02em',lineHeight:1.2,
-              fontFamily:"'Playfair Display',serif"}},greeting),
-            // Sync status dot
-            _el('div',{id:'sync-badge',title:'Checking sync...',style:{
-              width:8,height:8,borderRadius:'50%',background:'#b0a898',flexShrink:0,
-              marginTop:2,transition:'background 0.4s',opacity:0.85,cursor:'help'}})
-          ),
-          _el('div',{style:{color:'rgba(255,255,255,0.72)',fontSize:11.5,marginTop:2}},dateStr)
-        ),
-        _el('button',{style:{background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.3)',
-          color:'white',borderRadius:20,padding:'6px 13px',fontSize:11.5,fontWeight:700,
-          cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'},onclick:()=>showPrintSheet()},'🖨️ Print')
-      )
-    )
+    // ── Header — exact .duties-header class ──────────────────
+    const hdr = document.createElement('div')
+    hdr.className = 'duties-header'
+    hdr.innerHTML = `
+      <div class="duties-header-top">
+        <span style="font-size:26px;line-height:1">🏠</span>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="duties-title">${greeting}</div>
+            <div id="sync-badge" title="Checking sync…" style="width:8px;height:8px;border-radius:50%;background:#b0a898;flex-shrink:0;margin-top:2px;transition:background 0.4s;opacity:.85;cursor:help"></div>
+          </div>
+          <div class="duties-sub">${dateStr}</div>
+        </div>
+        <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">🖨️ Print</button>
+      </div>`
     root.appendChild(hdr)
 
-    const body=_el('div',{style:{padding:'18px 16px 88px',display:'flex',flexDirection:'column',gap:14}})
+    const body = document.createElement('div')
+    body.className = 'duties-body'
+    body.style.paddingBottom = '88px'
     root.appendChild(body)
 
-    // ── Firebase setup banner (shown until configured) ──
-    if(!_fbConfigured()){
-      body.appendChild(_el('div',{style:{background:'#fdf7e0',border:'1.5px solid #e8c84a',
-        borderRadius:13,padding:'13px 16px',display:'flex',gap:10,alignItems:'flex-start',
-        position:'relative',overflow:'hidden'}},
-        _el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'#c9a020'}}),
-        _el('div',{style:{paddingLeft:6}},
-          _el('div',{style:{fontWeight:700,fontSize:12.5,color:'#7a5500',marginBottom:3}},
-            '🔥 Firebase sync not configured yet'),
-          _el('div',{style:{fontSize:11.5,color:'#6a4400',lineHeight:1.5}},
-            'Data is saving locally on this device only. Set up Firebase to sync across your phone & computer. ' +
-            'See the setup guide below or ask Claude for help!')
-        )
-      ))
+    // ── Firebase banner ───────────────────────────────────────
+    if (!_fbConfigured()) {
+      const fb = document.createElement('div')
+      fb.className = 'task-card stripe-amber'
+      fb.style.marginBottom = '18px'
+      fb.innerHTML = `<div class="task-body" style="padding-left:8px">
+        <div class="task-name">🔥 Firebase sync not configured</div>
+        <div class="task-meta"><span class="badge tip">Data saving locally only · Ask Claude for setup help</span></div>
+      </div>`
+      body.appendChild(fb)
     }
 
-    // ── Conflict alert ───────────────────────────────
-    if(conflicts.length>0){
-      body.appendChild(_el('div',{style:{background:'#fffbf0',border:'1.5px solid #f0c94a',
-        borderRadius:13,padding:'12px 14px',display:'flex',gap:10,alignItems:'flex-start',
-        position:'relative',overflow:'hidden'}},
-        _el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'#c98a2a'}}),
-        _el('span',{style:{fontSize:18,flexShrink:0,paddingLeft:8}},'⚠️'),
-        _el('div',{style:{flex:1}},
-          _el('div',{style:{fontWeight:700,fontSize:12.5,color:'#7a5500',marginBottom:3}},
-            `${conflicts.length} schedule conflict${conflicts.length>1?'s':''} today`),
-          ...conflicts.map(c=>_el('div',{style:{fontSize:11.5,color:'#6a4400',lineHeight:1.4}},c.msg))
-        )
-      ))
+    // ── At a Glance stat cards ────────────────────────────────
+    const taskPct = tasks.total > 0 ? Math.round(tasks.done / tasks.total * 100) : 0
+    const medPct  = meds.total  > 0 ? Math.round(meds.doneCount / meds.total * 100) : 0
+
+    const sl1 = document.createElement('div')
+    sl1.className = 'section-label'
+    sl1.textContent = '📊 Today at a Glance'
+    body.appendChild(sl1)
+
+    const statGrid = document.createElement('div')
+    statGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px'
+
+    const mkStat = (icon, label, pct, sub, fillColor, section) => {
+      const c = document.createElement('div')
+      c.className = 'task-card card-stat stripe-terra'
+      c.onclick = () => switchSection(section)
+      c.innerHTML = `<div class="task-body" style="padding-left:8px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span style="font-size:16px">${icon}</span>
+          <span style="font-size:10px;font-weight:700;color:var(--light);letter-spacing:.06em;text-transform:uppercase">${label}</span>
+        </div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-0.03em;line-height:1;color:${pct===100?'var(--sage)':'var(--ink)'}">${pct}%</div>
+        <div style="font-size:11px;color:var(--mid);margin:4px 0 8px">${sub}</div>
+        <div style="height:4px;background:var(--faint);border-radius:999px;overflow:hidden">
+          <div style="height:100%;border-radius:999px;width:${pct}%;transition:width .5s;background:${pct===100?'var(--sage)':fillColor}"></div>
+        </div>
+      </div>`
+      return c
     }
+    statGrid.appendChild(mkStat('📋','Tasks', taskPct,
+      taskPct===100?'All done! ✅':`${tasks.done} of ${tasks.total} done`, 'var(--terra)', 'duties'))
+    statGrid.appendChild(mkStat('💊','Meds', medPct,
+      meds.total===0?'None today':medPct===100?'All given! ✅':`${meds.doneCount} of ${meds.total} given`, 'var(--sage)', 'meds'))
+    body.appendChild(statGrid)
 
-    // ── Stat cards row ───────────────────────────────
-    const taskPct=tasks.total>0?Math.round(tasks.done/tasks.total*100):0
-    const medPct=meds.total>0?Math.round(meds.doneCount/meds.total*100):0
-    const statRow=_el('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}})
+    // ── Meds due ──────────────────────────────────────────────
+    if (meds.pending.length > 0) {
+      const sl2 = document.createElement('div')
+      sl2.className = 'section-label sage'
+      sl2.innerHTML = '💊 Meds Due Today <button onclick="switchSection(\'meds\')" style="margin-left:auto;font-family:inherit;background:transparent;border:none;color:var(--sage);font-size:.78rem;font-weight:700;cursor:pointer;flex-shrink:0">View all →</button>'
+      body.appendChild(sl2)
 
-    const makeStatCard=(icon,label,pct,subLabel,accentColor,borderColor,section)=>{
-      const card=_el('div',{style:{background:'var(--warm-white)',borderRadius:14,padding:'14px 16px',
-        border:`1.5px solid ${borderColor}`,cursor:'pointer',position:'relative',overflow:'hidden',
-        transition:'transform 0.15s'},onclick:()=>switchSection(section)})
-      card.addEventListener('mousedown',()=>card.style.transform='scale(0.97)')
-      card.addEventListener('mouseup',()=>card.style.transform='')
-      card.addEventListener('mouseleave',()=>card.style.transform='')
-      // left accent stripe
-      card.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:accentColor}}))
-      card.appendChild(_el('div',{style:{paddingLeft:8}},
-        _el('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:8}},
-          _el('span',{style:{fontSize:18}},(icon)),
-          _el('span',{style:{fontSize:10,fontWeight:700,color:'var(--light)',letterSpacing:'0.06em',
-            textTransform:'uppercase'}},(label))
-        ),
-        _el('div',{style:{fontSize:26,fontWeight:800,color:pct===100?'var(--sage)':'var(--ink)',
-          letterSpacing:'-0.03em',lineHeight:1}},`${pct}%`),
-        _el('div',{style:{fontSize:11,color:'var(--mid)',marginBottom:8,marginTop:2}},subLabel),
-        _el('div',{style:{height:4,background:'var(--faint)',borderRadius:999,overflow:'hidden'}},
-          _el('div',{style:{height:'100%',borderRadius:999,width:`${pct}%`,transition:'width 0.5s',
-            background:pct===100?'var(--sage)':accentColor}}))
-      ))
-      return card
-    }
-
-    statRow.appendChild(makeStatCard('📋','Tasks',taskPct,
-      taskPct===100?'All done! ✅':`${tasks.done} of ${tasks.total} done`,
-      'var(--terra)','var(--terra-light)','duties'))
-    statRow.appendChild(makeStatCard('💊','Meds',medPct,
-      meds.total===0?'None today':medPct===100?'All given! ✅':`${meds.doneCount} of ${meds.total} given`,
-      'var(--sage)','var(--sage-light)','meds'))
-    body.appendChild(statRow)
-
-    // ── Pending meds ─────────────────────────────────
-    if(meds.pending.length>0){
-      const secLabel=_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',color:'var(--sage)',
-        display:'flex',alignItems:'center',gap:10,marginBottom:4}},
-        '💊 Meds Due Today',
-        _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,var(--sage-light),transparent)'}}),
-        _el('button',{style:{fontFamily:'inherit',background:'transparent',border:'none',color:'var(--sage)',
-          fontSize:'0.78rem',fontWeight:700,cursor:'pointer',flexShrink:0},
-          onclick:()=>switchSection('meds')},'View all →')
-      )
-      body.appendChild(secLabel)
-
-      const medCard=_el('div',{style:{background:'var(--warm-white)',borderRadius:14,
-        border:'1.5px solid var(--sage-light)',overflow:'hidden',position:'relative'}})
-      medCard.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'var(--sage)'}}))
-      ;['AM','PM'].forEach(slot=>{
-        const items=meds.pending.filter(i=>i.slot===slot)
-        if(!items.length)return
-        const slotColor=slot==='AM'?'var(--terra)':'#5a68a0'
-        const slotBg=slot==='AM'?'var(--amber-pale)':'#f0f0fa'
-        medCard.appendChild(_el('div',{style:{padding:'6px 14px 4px 18px',
-          fontSize:10,fontWeight:700,color:slotColor,letterSpacing:'0.06em',
-          background:slotBg,borderBottom:'1px solid var(--sand-light)'}},
-          slot==='AM'?'☀️  MORNING':'🌙  AFTERNOON'))
-        items.forEach(({cat,med,color})=>{
-          medCard.appendChild(_el('div',{style:{display:'flex',alignItems:'center',
-            gap:10,padding:'8px 14px 8px 18px',borderBottom:'1px solid var(--faint)'}},
-            _el('div',{style:{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}),
-            _el('span',{style:{fontWeight:600,fontSize:13,flex:1,color:'var(--ink)'}},cat.name),
-            _el('span',{style:{fontSize:11.5,color:'var(--mid)'}},`${med.name} · ${med.dose} ${med.unit}`)
-          ))
+      const medWrap = document.createElement('div')
+      medWrap.className = 'task-card stripe-sage'
+      medWrap.style.marginBottom = '20px'
+      medWrap.style.padding = '0'
+      let medHtml = ''
+      ;['AM','PM'].forEach(slot => {
+        const items = meds.pending.filter(i => i.slot === slot)
+        if (!items.length) return
+        const slotColor = slot==='AM' ? 'var(--terra)' : '#5a68a0'
+        const slotBg    = slot==='AM' ? 'var(--amber-pale)' : '#f0f0fa'
+        medHtml += `<div style="padding:6px 14px 4px 18px;font-size:10px;font-weight:700;color:${slotColor};letter-spacing:.06em;background:${slotBg};border-bottom:1px solid var(--sand-light)">${slot==='AM'?'☀️  MORNING':'🌙  AFTERNOON'}</div>`
+        items.forEach(({cat,med,color}) => {
+          medHtml += `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px 9px 18px;border-bottom:1px solid var(--faint)">
+            <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></div>
+            <span style="font-weight:600;font-size:13px;flex:1;color:var(--ink)">${cat.name}</span>
+            <span style="font-size:11.5px;color:var(--mid)">${med.name} · ${med.dose} ${med.unit}</span>
+          </div>`
         })
       })
-      body.appendChild(medCard)
+      medWrap.innerHTML = medHtml
+      body.appendChild(medWrap)
     }
 
-    // ── Today's appointments ──────────────────────────
-    const hasEvents=todayEvs.length>0
-    const apptLabel=_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',color:'#7a5090',
-      display:'flex',alignItems:'center',gap:10,marginBottom:4}},
-      `🐾 Today's Appointments${hasEvents?' ('+todayEvs.length+')':''}`,
-      _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,#c8aae0,transparent)'}}),
-      _el('button',{style:{fontFamily:'inherit',background:'transparent',border:'none',color:'#7a5090',
-        fontSize:'0.78rem',fontWeight:700,cursor:'pointer',flexShrink:0},
-        onclick:()=>switchSection('adoptions')},'Manage →')
-    )
-    body.appendChild(apptLabel)
+    // ── Today's Appointments ──────────────────────────────────
+    const sl3 = document.createElement('div')
+    sl3.className = 'section-label purple'
+    sl3.innerHTML = `🐾 Today's Appointments${todayEvs.length?' ('+todayEvs.length+')':''} <button onclick="switchSection('adoptions')" style="margin-left:auto;font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.78rem;font-weight:700;cursor:pointer;flex-shrink:0">Manage →</button>`
+    body.appendChild(sl3)
 
-    if(!hasEvents){
-      body.appendChild(_el('div',{style:{background:'var(--warm-white)',border:'1.5px solid var(--sand-light)',
-        borderRadius:13,padding:'20px',textAlign:'center',color:'var(--light)',fontSize:13,
-        fontStyle:'italic'}},'No appointments scheduled for today'))
+    if (!todayEvs.length) {
+      const empty = document.createElement('div')
+      empty.className = 'task-card'
+      empty.style.marginBottom = '20px'
+      empty.innerHTML = `<div class="task-body" style="padding-left:8px;text-align:center;color:var(--light);font-style:italic;font-size:13px">No appointments today</div>`
+      body.appendChild(empty)
     } else {
-      const apptList=_el('div',{style:{display:'flex',flexDirection:'column',gap:8}})
-      todayEvs.forEach(ev=>{
-        const isReturn=ev.type==='return'
-        const col=isReturn?'#b05070':'#7a5090'
-        const pale=isReturn?'#fdf0f3':'#f0eaf8'
-        const done=ev.checklist||{}
-        const checklist=isReturn?RETURN_CHECKLIST:[...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
-        const doneSteps=checklist.filter(s=>done[s.id]).length
-        const card=_el('div',{style:{background:'var(--warm-white)',border:`1.5px solid ${isReturn?'#e8b4c4':'#c8aae0'}`,
-          borderRadius:13,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,
-          cursor:'pointer',position:'relative',overflow:'hidden',transition:'transform 0.15s'},
-          onclick:()=>switchSection('adoptions')})
-        card.addEventListener('mousedown',()=>card.style.transform='scale(0.98)')
-        card.addEventListener('mouseup',()=>card.style.transform='')
-        card.addEventListener('mouseleave',()=>card.style.transform='')
-        card.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:col}}))
-        card.appendChild(_el('div',{style:{width:34,height:34,borderRadius:10,background:pale,
-          display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16,
-          marginLeft:8}},(isReturn?'↩':'🐾')))
-        const info=_el('div',{style:{flex:1,minWidth:0}})
-        info.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
-          _el('span',{style:{fontWeight:700,fontSize:13.5,color:'var(--ink)'}},ev.adopterName||'Adopter'),
-          ev.time&&_el('span',{style:{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:999,
-            background:pale,color:col}},ev.time),
-          ...(isReturn?[_el('span',{class:'badge',style:{fontSize:'0.62rem',fontWeight:700,padding:'2px 8px',
-            borderRadius:999,background:'#fdf0f3',color:'#b05070',border:'1px solid #e8b4c4',
-            letterSpacing:'0.04em'}},'↩ Return')]:[])
-        ))
-        if(ev.cats&&ev.cats.length>0)
-          info.appendChild(_el('div',{style:{fontSize:11.5,color:'var(--mid)',marginTop:2}},
-            '🐱 '+ev.cats.join(', ')))
-        // mini progress
-        info.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:8,marginTop:6}},
-          _el('div',{style:{flex:1,height:3,background:'var(--faint)',borderRadius:999,overflow:'hidden'}},
-            _el('div',{style:{height:'100%',borderRadius:999,background:col,transition:'width 0.3s',
-              width:`${checklist.length>0?doneSteps/checklist.length*100:0}%`}})),
-          _el('span',{style:{fontSize:10,color:col,fontWeight:700,flexShrink:0}},`${doneSteps}/${checklist.length}`)
-        ))
-        card.appendChild(info)
-        apptList.appendChild(card)
+      const apptWrap = document.createElement('div')
+      apptWrap.className = 'task-card stripe-purple'
+      apptWrap.style.cssText = 'padding:0;margin-bottom:20px;overflow:hidden'
+      todayEvs.forEach(ev => {
+        const isRet  = ev.type === 'return'
+        const isMove = ev.type === 'move'
+        const col    = isRet ? '#b05070' : isMove ? '#7a6030' : '#7a5090'
+        const pale   = isRet ? '#fdf0f3' : isMove ? '#fdf6e0' : '#f0eaf8'
+        const chk    = ev.checklist || {}
+        const cl     = isRet ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
+        const done   = cl.filter(s => chk[s.id]).length
+        const row    = document.createElement('div')
+        row.className = 'appt-mini'
+        row.style.borderLeft = `3px solid ${col}`
+        row.onclick = () => switchSection('adoptions')
+        row.innerHTML = `
+          <div style="width:32px;height:32px;border-radius:9px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px">${isRet?'↩':isMove?'🔄':'🐾'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span class="task-name" style="font-weight:700">${ev.adopterName||'Adopter'}</span>
+              ${ev.time?`<span class="badge" style="background:${pale};color:${col};border-color:${col}33">${ev.time}</span>`:''}
+              ${isRet?'<span class="badge solo">↩ Return</span>':isMove?'<span class="badge tip">🔄 Move</span>':''}
+            </div>
+            ${ev.cats&&ev.cats.length?`<div style="font-size:11.5px;color:var(--mid);margin-top:2px">🐱 ${ev.cats.join(', ')}</div>`:''}
+            <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
+              <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden"><div style="height:100%;border-radius:999px;background:${col};width:${cl.length>0?done/cl.length*100:0}%"></div></div>
+              <span style="font-size:10px;color:${col};font-weight:700">${done}/${cl.length}</span>
+            </div>
+          </div>
+          <span style="font-size:16px;color:var(--faint)">›</span>`
+        apptWrap.appendChild(row)
       })
-      body.appendChild(apptList)
+      body.appendChild(apptWrap)
     }
 
-    // ── Scan button ───────────────────────────────────
-    body.appendChild(_el('button',{style:{background:'var(--warm-white)',
-      border:'1.5px solid var(--sand)',color:'var(--mid)',borderRadius:12,padding:'11px',
-      fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',
-      width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-      marginTop:4},onclick:()=>showScanSheet()},'📷  Scan printed checklist to sync'))
+    // ── AI Smart Schedule ─────────────────────────────────────
+    const sl4 = document.createElement('div')
+    sl4.className = 'section-label amber'
+    sl4.textContent = '🗓️ Smart Day Plan'
+    body.appendChild(sl4)
+    renderSmartSchedule(body, todayEvs)
 
-    // ── Footer ────────────────────────────────────────
-    body.appendChild(_el('div',{style:{textAlign:'center',fontFamily:"'Caveat',cursive",
-      fontSize:'1.1rem',color:'var(--sand-dark)',paddingTop:8,paddingBottom:4,opacity:0.8}},
-      'made with 🤎 for Michi & the cats 🐾'))
+    // ── Staff notes section ───────────────────────────────────
+    const sl5 = document.createElement('div')
+    sl5.className = 'section-label'
+    sl5.innerHTML = `📝 Notes <button id="add-note-btn" style="margin-left:auto;font-family:inherit;background:var(--terra);color:white;border:none;border-radius:10px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer">+ Add</button>`
+    body.appendChild(sl5)
+    renderNotesList(body)
 
-  }catch(err){
-    root.innerHTML=`<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
+    // ── Extra tasks ───────────────────────────────────────────
+    const sl6 = document.createElement('div')
+    sl6.className = 'section-label'
+    sl6.innerHTML = `✏️ Extra Tasks <button id="add-extra-btn" style="margin-left:auto;font-family:inherit;background:var(--terra);color:white;border:none;border-radius:10px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer">+ Add</button>`
+    body.appendChild(sl6)
+    renderExtraTasksList(body)
+
+    // Bind add buttons
+    document.getElementById('add-note-btn').onclick  = () => showAddNote(body)
+    document.getElementById('add-extra-btn').onclick = () => showAddExtraTask(body)
+
+    _initSyncBadge()
+  } catch(err) {
+    root.innerHTML = `<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
     console.error(err)
   }
 }
+
+// ── AI Smart Schedule renderer ────────────────────────────────
+let _scheduleCache = null
+let _scheduleDate  = ''
+
+function renderSmartSchedule(body, todayEvs) {
+  const wrap = document.createElement('div')
+  wrap.id = 'smart-schedule-wrap'
+  wrap.style.marginBottom = '20px'
+  body.appendChild(wrap)
+
+  const hasAppts = todayEvs.length > 0
+  const cached   = _scheduleCache && _scheduleDate === todayDateStr()
+
+  if (cached) {
+    _drawSchedule(wrap, _scheduleCache)
+    return
+  }
+
+  // Empty state or generate prompt
+  const card = document.createElement('div')
+  card.className = 'task-card stripe-amber'
+  card.innerHTML = `<div class="task-body" style="padding-left:8px">
+    <div class="task-name">${hasAppts ? '🤖 Let AI plan your day around today\'s appointments' : '🌿 No appointments today — regular shift schedule'}</div>
+    <div class="task-meta" style="margin-top:8px">
+      ${hasAppts
+        ? `<button id="gen-schedule-btn" class="badge tip" style="cursor:pointer;border:none;font-family:inherit;padding:5px 14px;font-size:12px;font-weight:700">✨ Generate Smart Schedule</button>`
+        : `<span class="badge delegate">Cage cleaning 9–11 · Meds · Feeding · Laundry · Supplies</span>`}
+    </div>
+  </div>`
+  wrap.appendChild(card)
+
+  if (hasAppts) {
+    document.getElementById('gen-schedule-btn').onclick = () => _fetchSchedule(wrap, todayEvs)
+  }
+}
+
+async function _fetchSchedule(wrap, todayEvs) {
+  wrap.innerHTML = `<div class="task-card stripe-amber"><div class="task-body" style="padding-left:8px">
+    <div class="task-name">🤖 Building your schedule…</div>
+    <div class="task-meta"><span class="badge tip">This takes a few seconds</span></div>
+  </div></div>`
+
+  const apptLines = todayEvs.map(ev =>
+    `- ${ev.time||'?'}: ${ev.adopterName} (${ev.type})${ev.cats&&ev.cats.length?' — cats: '+ev.cats.join(', '):''}${ev.notes?' — note: '+ev.notes:''}`
+  ).join('\n')
+
+  const prompt = `You are a scheduling assistant for a cat shelter kennel technician working 9 AM–5 PM.
+
+Their fixed daily duties are:
+- 9:00 AM: Give AM medications (solo, ~20 min)
+- 9:00–11:00 AM: Cage cleaning across 6 rooms (with volunteers)
+- 12:00 PM: Give wet food + do dishes (~45 min, solo)
+- 3:00–3:30 PM: Give PM medications (solo)
+- 4:30 PM: Set up cart for next day (~20 min)
+- Laundry runs throughout day (start loads when free)
+- Feeding and litter checks between tasks
+
+Today's adoption/return appointments at JCAC:
+${apptLines}
+
+Each adoption appointment takes about 45–75 minutes. Returns take about 20–30 min.
+
+Create a practical minute-by-minute schedule for the full day (9 AM–5 PM) that:
+1. Fits all appointments without missing any duties
+2. Flags any tight spots or things to watch out for
+3. Suggests when to run laundry loads
+
+Respond ONLY with a JSON array, no markdown, no explanation. Each item:
+{"time":"9:00 AM","label":"Give AM meds","type":"duty","note":"Do before cage cleaning starts"}
+
+Types: "duty", "appointment", "laundry", "warning", "free"`
+
+  try {
+    const data = await _claudeAPI({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+    const raw = data.content?.find(b => b.type==='text')?.text || '[]'
+    const clean = raw.replace(/```json|```/g,'').trim()
+    const schedule = JSON.parse(clean)
+    _scheduleCache = schedule
+    _scheduleDate  = todayDateStr()
+    _drawSchedule(wrap, schedule)
+  } catch(err) {
+    wrap.innerHTML = `<div class="task-card stripe-rose"><div class="task-body" style="padding-left:8px">
+      <div class="task-name">⚠️ Couldn't generate schedule</div>
+      <div class="task-meta"><span class="badge solo">${err.message}</span></div>
+    </div></div>`
+  }
+}
+
+function _drawSchedule(wrap, schedule) {
+  wrap.innerHTML = ''
+  const outer = document.createElement('div')
+  outer.className = 'schedule-wrap'
+
+  // header row
+  const hdr = document.createElement('div')
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px 10px 18px;border-bottom:1px solid var(--sand-light);background:var(--terra-pale)'
+  hdr.innerHTML = `<span style="font-weight:700;font-size:12.5px;color:var(--terra)">🗓️ Today's Plan</span>
+    <button onclick="_scheduleCache=null;renderToday()" style="font-family:inherit;background:transparent;border:none;color:var(--mid);font-size:11px;cursor:pointer;font-weight:600">↺ Regenerate</button>`
+  outer.appendChild(hdr)
+
+  const typeColors = {
+    duty:        'var(--terra)',
+    appointment: '#7a5090',
+    laundry:     'var(--sage)',
+    warning:     'var(--amber)',
+    free:        'var(--light)'
+  }
+
+  schedule.forEach(item => {
+    const row = document.createElement('div')
+    row.className = 'schedule-item'
+    const col = typeColors[item.type] || 'var(--mid)'
+    row.innerHTML = `
+      <div class="schedule-time">${item.time||''}</div>
+      <div class="schedule-dot" style="background:${col}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="schedule-label">${item.label||''}</div>
+        ${item.note?`<div class="schedule-note">${item.note}</div>`:''}
+      </div>`
+    outer.appendChild(row)
+  })
+  wrap.appendChild(outer)
+}
+
 
 // ═══════════════════════════════════════════════════
 // ADOPTIONS TAB
@@ -1206,247 +1338,258 @@ let _apptTab='adoptions'
 let _expandedEvent=null
 
 function renderAdoptionsTab(){
-  const root=document.getElementById('adoptions-root')
-  if(!root)return
-  const scrollEl=root.closest('.app-section')||root.parentElement
-  const savedScroll=scrollEl?scrollEl.scrollTop:0
-  root.innerHTML=''
-  try{
-    const events=loadEvents()
-    const today=todayDateStr()
-    const todayAdoptions=events.filter(e=>e.date===today&&e.type!=='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const todayReturns=events.filter(e=>e.date===today&&e.type==='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const upcomingAdoptions=events.filter(e=>e.date>today&&e.type!=='return').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
-    const upcomingReturns=events.filter(e=>e.date>today&&e.type==='return').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
-    const pastAdoptions=events.filter(e=>e.date<today&&e.type!=='return').sort((a,b)=>b.date.localeCompare(a.date))
-    const pastReturns=events.filter(e=>e.date<today&&e.type==='return').sort((a,b)=>b.date.localeCompare(a.date))
+  const root = document.getElementById('adoptions-root')
+  if (!root) return
+  const scrollEl = root.closest('.app-section') || root.parentElement
+  const savedScroll = scrollEl ? scrollEl.scrollTop : 0
+  root.innerHTML = ''
+  try {
+    const events   = loadEvents()
+    const today    = todayDateStr()
+    const isAdopt  = _apptTab === 'adoptions'
 
-    const isAdopt=_apptTab==='adoptions'
-    const accentColor=isAdopt?'#7a5090':'#b05070'
-    const accentPale=isAdopt?'#f0eaf8':'#fdf0f3'
-    const accentBorder=isAdopt?'#c8aae0':'#e8b4c4'
-    const accentLight=isAdopt?'#e4d5f5':'#f5d5df'
+    const todayAdoptions   = events.filter(e=>e.date===today&&e.type==='adoption').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const todayReturns     = events.filter(e=>e.date===today&&(e.type==='return'||e.type==='move')).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const upcomingAdoptions= events.filter(e=>e.date>today&&e.type==='adoption').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
+    const upcomingReturns  = events.filter(e=>e.date>today&&(e.type==='return'||e.type==='move')).sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
+    const pastAdoptions    = events.filter(e=>e.date<today&&e.type==='adoption').sort((a,b)=>b.date.localeCompare(a.date))
+    const pastReturns      = events.filter(e=>e.date<today&&(e.type==='return'||e.type==='move')).sort((a,b)=>b.date.localeCompare(a.date))
 
-    // ── Header — matches Duties structure ──
-    const hdr=_el('div',{style:{background:accentColor,padding:'16px 18px 0',position:'sticky',
-      top:0,zIndex:20,boxShadow:`0 2px 12px ${accentColor}55`}})
-    hdr.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:14}},
-      _el('span',{style:{fontSize:26}},'🐾'),
-      _el('div',{style:{flex:1}},
-        _el('div',{style:{color:'white',fontWeight:800,fontSize:17,letterSpacing:'-0.02em',
-          fontFamily:"'Playfair Display',serif"}},'Adoptions & Returns'),
-        _el('div',{style:{color:'rgba(255,255,255,0.72)',fontSize:11,marginTop:2}},
-          new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}))
-      ),
-      _el('button',{style:{background:'rgba(255,255,255,0.22)',border:'1px solid rgba(255,255,255,0.3)',
-        color:'white',borderRadius:20,padding:'5px 12px',fontSize:11.5,fontWeight:700,
-        cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'},onclick:()=>showPrintSheet()},'🖨️ Print')
-    ))
-    // Tab toggle
-    const tabBar=_el('div',{style:{display:'flex',gap:3,borderRadius:'10px 10px 0 0',padding:'4px 4px 0',
-      background:'rgba(0,0,0,0.12)'}})
-    ;[['adoptions','🐾 Adoptions'],['returns','↩ Returns']].forEach(([key,label])=>{
-      const active=_apptTab===key
-      tabBar.appendChild(_el('button',{style:{flex:1,border:'none',
-        background:active?'var(--warm-white)':'transparent',
-        color:active?accentColor:'rgba(255,255,255,0.82)',
-        borderRadius:'8px 8px 0 0',padding:'9px 6px',cursor:'pointer',
-        fontFamily:'inherit',fontWeight:active?700:400,fontSize:12.5,transition:'all 0.15s'},
-        onclick:()=>{_apptTab=key;_expandedEvent=null;renderAdoptionsTab()}},label))
+    const todayList    = isAdopt ? todayAdoptions    : todayReturns
+    const upcomingList = isAdopt ? upcomingAdoptions : upcomingReturns
+    const pastList     = isAdopt ? pastAdoptions     : pastReturns
+
+    const accentColor  = isAdopt ? '#7a5090' : '#b05070'
+    const accentBorder = isAdopt ? '#c8aae0' : '#e8b4c4'
+
+    // ── Header — exact .duties-header class ──────────────────
+    const hdr = document.createElement('div')
+    hdr.className = 'duties-header'
+    hdr.style.background = accentColor
+    hdr.style.boxShadow = `0 2px 12px ${accentColor}55`
+    hdr.innerHTML = `
+      <div class="duties-header-top">
+        <span style="font-size:26px;line-height:1">🐾</span>
+        <div style="flex:1">
+          <div class="duties-title">Adoptions &amp; Returns</div>
+          <div class="duties-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+        </div>
+        <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">🖨️ Print</button>
+      </div>
+      <div class="d-tabs">
+        <button class="d-tab-btn${isAdopt?' active':''}" onclick="_apptTab='adoptions';_expandedEvent=null;renderAdoptionsTab()">🐾 Adoptions</button>
+        <button class="d-tab-btn${!isAdopt?' active':''}" onclick="_apptTab='returns';_expandedEvent=null;renderAdoptionsTab()">↩ Returns</button>
+      </div>`
+    // Fix active color since header isn't terra
+    hdr.querySelectorAll('.d-tab-btn.active').forEach(btn => {
+      btn.style.color = accentColor
     })
-    hdr.appendChild(tabBar)
     root.appendChild(hdr)
 
-    const body=_el('div',{style:{padding:'18px 16px 88px',background:'var(--cream)',minHeight:'100%'}})
+    const body = document.createElement('div')
+    body.className = 'duties-body'
+    body.style.paddingBottom = '88px'
     root.appendChild(body)
 
-    const todayList=isAdopt?todayAdoptions:todayReturns
-    const upcomingList=isAdopt?upcomingAdoptions:upcomingReturns
-    const pastList=isAdopt?pastAdoptions:pastReturns
-
-    // ── Action buttons ────────────────────────────────
-    const btnRow=_el('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',marginBottom:16}})
-    if(isAdopt) btnRow.appendChild(_el('button',{style:{background:'var(--warm-white)',color:accentColor,
-      border:`1.5px solid ${accentBorder}`,borderRadius:10,padding:'7px 14px',fontSize:12,
-      fontWeight:600,cursor:'pointer',fontFamily:'inherit'},
-      onclick:()=>showCsvImport(body,events,renderAdoptionsTab)},'📄 Import CSV'))
-    btnRow.appendChild(_el('button',{style:{background:accentColor,color:'white',border:'none',
-      borderRadius:10,padding:'8px 18px',fontSize:12.5,fontWeight:700,cursor:'pointer',fontFamily:'inherit'},
-      onclick:()=>showEventForm(body,events,isAdopt?'adoption':'return',renderAdoptionsTab)},
-      isAdopt?'+ Add Adoption':'+ Log Return'))
+    // ── Action buttons ────────────────────────────────────────
+    const btnRow = document.createElement('div')
+    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-bottom:18px'
+    if (isAdopt) {
+      const csvBtn = document.createElement('button')
+      csvBtn.style.cssText = `background:var(--warm-white);color:${accentColor};border:1.5px solid ${accentBorder};border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit`
+      csvBtn.textContent = '📄 Import CSV'
+      csvBtn.onclick = () => showCsvImport(body, events, renderAdoptionsTab)
+      btnRow.appendChild(csvBtn)
+    }
+    const addBtn = document.createElement('button')
+    addBtn.style.cssText = `background:${accentColor};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit`
+    addBtn.textContent = isAdopt ? '+ Add Adoption' : '+ Log Return'
+    addBtn.onclick = () => showEventForm(body, events, isAdopt?'adoption':'return', renderAdoptionsTab)
+    btnRow.appendChild(addBtn)
     body.appendChild(btnRow)
 
-    // ── Today section ─────────────────────────────────
-    body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
-      color:accentColor,display:'flex',alignItems:'center',gap:10,marginBottom:10}},
-      `Today — ${todayList.length?todayList.length+' appointment'+(todayList.length!==1?'s':''):'none scheduled'}`,
-      _el('div',{style:{flex:1,height:'1.5px',background:`linear-gradient(to right,${accentBorder},transparent)`}})
-    ))
+    // ── Today section ─────────────────────────────────────────
+    const sl1 = document.createElement('div')
+    sl1.className = `section-label ${isAdopt?'purple':'rose'}`
+    sl1.textContent = `Today — ${todayList.length ? todayList.length+' appointment'+(todayList.length!==1?'s':'') : 'none scheduled'}`
+    body.appendChild(sl1)
 
-    if(!todayList.length){
-      body.appendChild(_el('div',{style:{background:'var(--warm-white)',border:'1.5px solid var(--sand-light)',
-        borderRadius:13,padding:'20px',textAlign:'center',color:'var(--light)',fontSize:13,
-        fontStyle:'italic',marginBottom:18}},
-        isAdopt?'No adoption appointments today':'No returns today'))
+    if (!todayList.length) {
+      const empty = document.createElement('div')
+      empty.className = 'task-card'
+      empty.style.marginBottom = '18px'
+      empty.innerHTML = `<div class="task-body" style="padding-left:8px;text-align:center;color:var(--light);font-style:italic;font-size:13px">${isAdopt?'No adoptions today':'No returns or moves today'}</div>`
+      body.appendChild(empty)
     } else {
-      const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}})
-      todayList.forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab)))
+      const list = document.createElement('div')
+      list.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px'
+      todayList.forEach(ev => list.appendChild(renderEventCard(ev, events, renderAdoptionsTab)))
       body.appendChild(list)
     }
 
-    // ── Upcoming section ─────────────────────────────
-    if(upcomingList.length>0){
-      // Group by date
-      const byDate={}
-      upcomingList.forEach(ev=>{
-        if(!byDate[ev.date]) byDate[ev.date]=[]
-        byDate[ev.date].push(ev)
-      })
-      const dateLabel=d=>{
-        const dt=new Date(d+'T12:00:00')
-        const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1)
-        const isTmr=dt.toDateString()===tomorrow.toDateString()
-        return (isTmr?'Tomorrow — ':'')
-          +dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
-          +' — '+byDate[d].length+' appt'+(byDate[d].length!==1?'s':'')
-      }
-      body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
-        color:accentColor,display:'flex',alignItems:'center',gap:10,marginBottom:10,marginTop:4}},
-        `Upcoming — ${upcomingList.length} appointment${upcomingList.length!==1?'s':''}`,
-        _el('div',{style:{flex:1,height:'1.5px',background:`linear-gradient(to right,${accentBorder},transparent)`}})
-      ))
-      Object.keys(byDate).forEach(date=>{
-        body.appendChild(_el('div',{style:{fontSize:11,fontWeight:700,letterSpacing:'.05em',
-          textTransform:'uppercase',color:accentColor,padding:'6px 2px 4px',opacity:.7}},
-          dateLabel(date)))
-        const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}})
-        byDate[date].forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab)))
+    // ── Upcoming section ──────────────────────────────────────
+    if (upcomingList.length > 0) {
+      const byDate = {}
+      upcomingList.forEach(ev => { if(!byDate[ev.date]) byDate[ev.date]=[]; byDate[ev.date].push(ev) })
+
+      const sl2 = document.createElement('div')
+      sl2.className = `section-label ${isAdopt?'purple':'rose'}`
+      sl2.textContent = `Upcoming — ${upcomingList.length} appointment${upcomingList.length!==1?'s':''}`
+      body.appendChild(sl2)
+
+      Object.keys(byDate).forEach(date => {
+        const dt = new Date(date + 'T12:00:00')
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1)
+        const isTmr = dt.toDateString() === tomorrow.toDateString()
+        const dateTag = document.createElement('div')
+        dateTag.className = 'time-header'
+        dateTag.style.marginBottom = '8px'
+        const tagEl = document.createElement('span')
+        tagEl.className = `time-tag ${isTmr?'am':'anytime'}`
+        tagEl.textContent = (isTmr?'Tomorrow · ':'')+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
+        dateTag.appendChild(tagEl)
+        body.appendChild(dateTag)
+        const list = document.createElement('div')
+        list.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:14px'
+        byDate[date].forEach(ev => list.appendChild(renderEventCard(ev, events, renderAdoptionsTab)))
         body.appendChild(list)
       })
     }
 
-    // ── Recent history ────────────────────────────────
-    if(pastList.length>0){
-      body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
-        color:'var(--mid)',display:'flex',alignItems:'center',gap:10,marginBottom:10}},
-        `Recent History — ${pastList.length} total`,
-        _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,var(--sand),transparent)'}})
-      ))
-      const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:16}})
-      pastList.slice(0,8).forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab,true)))
+    // ── Recent history ────────────────────────────────────────
+    if (pastList.length > 0) {
+      const sl3 = document.createElement('div')
+      sl3.className = 'section-label'
+      sl3.textContent = `Recent History — ${pastList.length} total`
+      body.appendChild(sl3)
+      const list = document.createElement('div')
+      list.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px'
+      pastList.slice(0,8).forEach(ev => list.appendChild(renderEventCard(ev, events, renderAdoptionsTab, true)))
       body.appendChild(list)
     }
 
-    // Restore scroll
-    if(scrollEl&&savedScroll>0) requestAnimationFrame(()=>{scrollEl.scrollTop=savedScroll})
+    if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
 
-  }catch(err){
-    root.innerHTML=`<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
+  } catch(err) {
+    root.innerHTML = `<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
     console.error(err)
   }
 }
 
-// _el_section replaced by inline Caveat section labels
+function renderEventCard(ev, all, rerender, compact) {
+  const isRet  = ev.type === 'return'
+  const isMove = ev.type === 'move'
+  const col    = isRet ? '#b05070' : isMove ? '#7a6030' : '#7a5090'
+  const pale   = isRet ? '#fdf0f3' : isMove ? '#fdf6e0' : '#f5f0fa'
+  const border = isRet ? '#e8b4c4' : isMove ? '#e0cc88' : '#c8aae0'
+  const stripeClass = isRet ? 'stripe-rose' : isMove ? 'stripe-move' : 'stripe-purple'
+  const checklist = isRet ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
+  const done      = ev.checklist || {}
+  const doneSteps = checklist.filter(s => done[s.id]).length
+  const isExpanded = _expandedEvent === ev.id && !compact
 
+  const card = document.createElement('div')
+  card.className = `task-card ${stripeClass}`
+  if (compact) card.style.opacity = '0.7'
+  if (isExpanded) card.style.borderColor = col
 
-function renderEventCard(ev,all,rerender,compact){
-  const isReturn=ev.type==='return'
-  const col=isReturn?'#b05070':'#7a5090'
-  const pale=isReturn?'#fdf0f3':'#f5f0fa'
-  const border=isReturn?'#e8b4c4':'#c8aae0'
-  const checklist=isReturn?RETURN_CHECKLIST:[...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
-  const done=ev.checklist||{}
-  const doneSteps=checklist.filter(s=>done[s.id]).length
-  const totalSteps=checklist.length
-  const isExpanded=_expandedEvent===ev.id&&!compact
+  // ── Top row ───────────────────────────────────────────────
+  const topRow = document.createElement('div')
+  topRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:2px 0'
+  topRow.onclick = () => { _expandedEvent = isExpanded ? null : ev.id; rerender() }
 
-  const card=_el('div',{style:{background:'var(--warm-white)',border:`1.5px solid ${isExpanded?col:border}`,
-    borderRadius:13,overflow:'hidden',transition:'border-color 0.2s',position:'relative'}})
-  // left accent stripe
-  const cardStripe=_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,
-    background:compact?'var(--faint)':col,transition:'background 0.2s',zIndex:1}})
-  card.appendChild(cardStripe)
-
-  // Card top row
-  const topRow=_el('div',{style:{display:'flex',alignItems:'flex-start',gap:10,
-    padding:'12px 13px 12px 16px',cursor:'pointer'},
-    onclick:()=>{_expandedEvent=isExpanded?null:ev.id;rerender()}
-  },
-    _el('div',{style:{width:36,height:36,borderRadius:10,background:pale,
-      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:18}},
-      isReturn?'↩':'🐾'),
-    _el('div',{style:{flex:1,minWidth:0}},
-      _el('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}},
-        _el('span',{style:{fontWeight:800,fontSize:14}},ev.adopterName||'Adopter'),
-        ev.time&&_el('span',{style:{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:999,
-          background:pale,color:col}},ev.time),
-        ...(ev.status==='completed'?[_el('span',{style:{fontSize:10,fontWeight:700,padding:'2px 7px',
-          borderRadius:999,background:'#d4f0dc',color:'#3a8a5c'}},'✓ Done')]:[] )
-      ),
-      ev.cats&&ev.cats.length>0&&_el('div',{style:{fontSize:12,color:'#7a6e65',marginBottom:3}},
-        '🐱 '+ev.cats.join(', ')),
-      ev.notes&&_el('div',{style:{fontSize:11,color:'#b0a898',fontStyle:'italic',marginBottom:3}},ev.notes),
-      // Progress bar
-      !compact&&_el('div',{style:{display:'flex',alignItems:'center',gap:8,marginTop:4}},
-        _el('div',{style:{flex:1,height:3,background:'#f0ebe4',borderRadius:999,overflow:'hidden'}},
-          _el('div',{style:{height:'100%',borderRadius:999,background:col,transition:'width 0.3s',
-            width:`${totalSteps>0?doneSteps/totalSteps*100:0}%`}})),
-        _el('span',{style:{fontSize:10,color:col,fontWeight:700,flexShrink:0}},`${doneSteps}/${totalSteps}`)
-      )
-    ),
-    !compact&&_el('div',{style:{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end',flexShrink:0}},
-      _el('span',{style:{fontSize:14,color:'#b0a898',transform:isExpanded?'rotate(180deg)':'none',
-        transition:'transform 0.2s',display:'block',lineHeight:1}},'⌄'),
-      _el('div',{style:{display:'flex',gap:4},onclick:e=>e.stopPropagation()},
-        ...(ev.status==='scheduled'?[_el('button',{style:{background:col,color:'white',border:'none',
-          borderRadius:6,padding:'4px 9px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>_updateEvtStatus(ev.id,'completed',all,rerender)},'✓')]: []),
-        _el('button',{style:{background:'transparent',color:col,border:`1px solid ${border}`,
-          borderRadius:6,padding:'4px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>showInlineEventEdit(card,ev,all,rerender)},'✎'),
-        _el('button',{style:{background:'transparent',color:'#b0a898',border:'1px solid #e8ddd0',
-          borderRadius:6,padding:'4px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>_deleteEvt(ev.id,all,rerender)},'×')
-      )
-    )
-  )
+  topRow.innerHTML = `
+    <div style="width:36px;height:36px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">${isRet?'↩':isMove?'🔄':'🐾'}</div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+        <span class="task-name" style="font-weight:800;font-size:14px">${ev.adopterName||'Adopter'}</span>
+        ${ev.time?`<span class="badge" style="background:${pale};color:${col};border-color:${col}44">${ev.time}</span>`:''}
+        ${ev.status==='completed'?'<span class="badge delegate">✓ Done</span>':''}
+      </div>
+      ${ev.cats&&ev.cats.length?`<div style="font-size:12px;color:var(--mid);margin-bottom:3px">🐱 ${ev.cats.join(', ')}</div>`:''}
+      ${ev.notes?`<div style="font-size:11.5px;color:var(--mid);font-style:italic;margin-bottom:3px;line-height:1.45;white-space:normal">${ev.notes}</div>`:''}
+      ${!compact?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+        <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden"><div style="height:100%;border-radius:999px;background:${col};width:${checklist.length>0?doneSteps/checklist.length*100:0}%"></div></div>
+        <span style="font-size:10px;color:${col};font-weight:700">${doneSteps}/${checklist.length}</span>
+      </div>`:''}
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+      <span class="badge ${isRet?'solo':isMove?'tip':'delegate'}">${isRet?'↩ Return':isMove?'🔄 Move':'🐾 Adoption'}</span>
+      <span style="font-size:18px;color:var(--faint);transition:transform .2s;${isExpanded?'transform:rotate(90deg)':''}">›</span>
+    </div>`
   card.appendChild(topRow)
 
-  // Expanded checklist
-  if(isExpanded){
-    const sections=isReturn
-      ?[{label:null,items:RETURN_CHECKLIST}]
-      :[{label:'BEFORE',items:ADOPTION_CHECKLIST.before},
-        {label:'DURING — SHELTERLUV',items:ADOPTION_CHECKLIST.during},
-        {label:'AFTER',items:ADOPTION_CHECKLIST.after}]
+  // ── Expanded checklist ───────────────────────────────────
+  if (isExpanded) {
+    const exp = document.createElement('div')
+    exp.style.cssText = `border-top:1.5px solid ${border};margin-top:10px;padding-top:10px`
 
-    const clBody=_el('div',{style:{borderTop:`1px solid ${border}`,padding:'10px 12px 10px 16px',
-      background:pale,display:'flex',flexDirection:'column',gap:1}})
-    sections.forEach(({label,items})=>{
-      if(label) clBody.appendChild(_el('div',{style:{fontSize:9,fontWeight:700,color:col,
-        letterSpacing:'0.07em',padding:'8px 4px 4px',opacity:0.75}},label))
-      items.forEach(step=>{
-        const checked=!!done[step.id]
-        clBody.appendChild(_el('div',{style:{display:'flex',alignItems:'flex-start',gap:9,
-          padding:'7px 8px',borderRadius:8,cursor:'pointer',
-          background:checked?pale:'transparent'},
-          onclick:()=>{
-            const updated=[...all], idx=updated.findIndex(e=>e.id===ev.id)
-            if(idx>=0){updated[idx]={...updated[idx],checklist:{...done,[step.id]:!checked}};saveEvents(updated);rerender()}
-          }},
-          _el('div',{style:{width:17,height:17,borderRadius:4,flexShrink:0,marginTop:1,
-            background:checked?col:'white',border:`1.5px solid ${checked?col:'#e8ddd0'}`,
-            display:'flex',alignItems:'center',justifyContent:'center'}},
-            checked?_el('span',{style:{fontSize:9,color:'white',fontWeight:900,lineHeight:1}},'✓'):null),
-          _el('span',{style:{fontSize:12,lineHeight:1.4,color:checked?col:'#3a3530',
-            textDecoration:checked?'line-through':'none',opacity:checked?0.65:1}},step.label)
-        ))
+    // Edit / status buttons
+    const actRow = document.createElement('div')
+    actRow.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap'
+    ;[['✎ Edit','#showEventEditForm'],['✓ Complete','#markDone'],['🗑','#deleteEvt']].forEach(([lbl])=>{})
+
+    const editBtn = document.createElement('button')
+    editBtn.className = 'badge quick'
+    editBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    editBtn.textContent = '✎ Edit details'
+    editBtn.onclick = e => { e.stopPropagation(); showEventForm(card.closest('.duties-body')||document.getElementById('adoptions-root'), all, ev.type, rerender, ev) }
+
+    const doneBtn = document.createElement('button')
+    doneBtn.className = 'badge delegate'
+    doneBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    doneBtn.textContent = ev.status==='completed' ? '↩ Reopen' : '✓ Mark complete'
+    doneBtn.onclick = e => { e.stopPropagation(); _updateEvtStatus(ev.id, ev.status==='completed'?'scheduled':'completed', all, rerender) }
+
+    const delBtn = document.createElement('button')
+    delBtn.className = 'badge solo'
+    delBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px'
+    delBtn.textContent = '🗑 Remove'
+    delBtn.onclick = e => { e.stopPropagation(); if(confirm(`Remove ${ev.adopterName}?`)){const evts=loadEvents().filter(x=>x.id!==ev.id);saveEvents(evts);rerender()} }
+    actRow.append(editBtn, doneBtn, delBtn)
+    exp.appendChild(actRow)
+
+    // Checklist sections
+    const sections = isRet
+      ? [['', RETURN_CHECKLIST]]
+      : [['Before', ADOPTION_CHECKLIST.before],['During', ADOPTION_CHECKLIST.during],['After', ADOPTION_CHECKLIST.after]]
+
+    sections.forEach(([secLabel, items]) => {
+      if (secLabel) {
+        const sh = document.createElement('div')
+        sh.style.cssText = `font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${col};padding:6px 2px 4px;opacity:.8`
+        sh.textContent = secLabel
+        exp.appendChild(sh)
+      }
+      items.forEach(step => {
+        const row = document.createElement('div')
+        row.className = 'task-card' + (done[step.id] ? ' done' : '')
+        row.style.cssText = 'margin-bottom:6px;cursor:pointer'
+        row.onclick = e => {
+          e.stopPropagation()
+          const evts = loadEvents()
+          const target = evts.find(x => x.id === ev.id)
+          if (target) {
+            if (!target.checklist) target.checklist = {}
+            target.checklist[step.id] = !target.checklist[step.id]
+            saveEvents(evts)
+            rerender()
+          }
+        }
+        row.innerHTML = `
+          <div class="task-checkbox"><svg width="11" height="9" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="task-body">
+            <div class="task-name">${step.label}</div>
+            ${step.note?`<div class="task-meta"><span class="badge tip">💡 ${step.note}</span></div>`:''}
+          </div>`
+        exp.appendChild(row)
       })
     })
-    card.appendChild(clBody)
+    card.appendChild(exp)
   }
   return card
 }
+
 
 function _updateEvtStatus(id,status,all,rerender){
   saveEvents(all.map(a=>a.id===id?{...a,status}:a));rerender()
@@ -1458,8 +1601,9 @@ function showInlineEventEdit(card,ev,all,rerender){
   if(existingForm){existingForm.remove();return}
 
   const isReturn=ev.type==='return'
-  const col=isReturn?'#b05070':'#7a5090'
-  const pale=isReturn?'#fdf0f3':'#f5f0fa'
+  const isMove=ev.type==='move'
+  const col=isReturn?'#b05070':isMove?'#7a6030':'#7a5090'
+  const pale=isReturn?'#fdf0f3':isMove?'#fdf6e0':'#f5f0fa'
   const bdr=isReturn?'#e8b4c4':'#c8aae0'
   const cats=(()=>{try{return JSON.parse(localStorage.getItem('shelter_cats')||'[]').map(c=>c.name)}catch{return []}})()
   const selectedCats=new Set(ev.cats||[])
@@ -1734,24 +1878,58 @@ function showCsvImport(container, events, rerender) {
       return
     }
 
-    // Build events
+    // Build events — handles adoptions, returns (CAT MOVES), and ARRIVED notes
     const built=[], skipped=[]
     jcacRows.forEach(r=>{
       if(!r._date){skipped.push(r);return}
-      const name=(adopterCol?r[adopterCol]:'').trim()
-      const cats=animalCol&&r[animalCol]?[r[animalCol].trim()].filter(Boolean):[]
-      const notes=(notesCol?r[notesCol]:'').trim()
-      if(!name||/^no\s*appts?/i.test(name)){skipped.push(r);return}
-      if(!cats.length&&!notes&&name===name){}  // name is enough
-      let type='adoption'
-      if(typeCol&&r[typeCol]&&/return|reclaim|surrender/i.test(r[typeCol])) type='return'
-      built.push({
-        id:_uid(), type,
-        adopterName:name||'Open Slot',
-        date:r._date,
-        time:timeCol?_parseTime(r[timeCol]):'',
-        cats, notes, status:'scheduled', checklist:{}, importedFrom:'csv'
-      })
+
+      const name        = (adopterCol?r[adopterCol]:'').trim()
+      const catMove     = (r['CAT MOVES']||'').trim()
+      const arrivedNote = (r['ARRIVED? ADOPTED?']||'').trim()
+      const staffNote   = (r['Staff/ Volunteer Notes']||'').trim()
+      const cats        = animalCol&&r[animalCol]?[r[animalCol].trim()].filter(Boolean):[]
+      const noAppts     = /^no\s*appts?/i.test(name)
+
+      // ── Case 1: Regular adoption with adopter name ──
+      if(name && !noAppts){
+        // Pull in ARRIVED? ADOPTED? as the primary note — it has the key details
+        const noteParts=[arrivedNote,staffNote].filter(Boolean)
+        let type='adoption'
+        if(/return|reclaim|surrender/i.test(arrivedNote)||/return|reclaim|surrender/i.test(name)) type='return'
+        built.push({
+          id:_uid(), type,
+          adopterName:name,
+          date:r._date,
+          time:timeCol?_parseTime(r[timeCol]):'',
+          cats,
+          notes:noteParts.join(' · '),
+          status:'scheduled', checklist:{}, importedFrom:'csv'
+        })
+      }
+
+      // ── Case 2: CAT MOVES entry — returns or transfers ──
+      if(catMove){
+        const isReturn = /return|reclaim|surrender/i.test(catMove)
+        // Extract cat name — e.g. "Choccy (16824)" or "Lateef"
+        const catMatch = catMove.match(/\b([A-Z][a-z]{1,12})\s*(?:\(\d+\))?\s*(?:return|adoption|transfer|,| to )/i)
+        const catName  = catMatch ? catMatch[1] : ''
+        // Parse time from note prefix like "2p:" or "Aft:"
+        const tPfx     = catMove.match(/^(\d{1,2}[ap]|aft(?:ernoon)?|morn(?:ing)?|am|pm)\s*:/i)
+        const evtTime  = tPfx ? _parseTime(tPfx[1].replace(':','').trim()) : (timeCol?_parseTime(r[timeCol]):'')
+        built.push({
+          id:_uid(),
+          type: isReturn?'return':'move',
+          adopterName: catName?(catName+(isReturn?' — Return':' — Transfer')):(isReturn?'Cat Return':'Cat Transfer'),
+          date:r._date,
+          time:evtTime,
+          cats:catName?[catName]:[],
+          notes:catMove,
+          status:'scheduled', checklist:{}, importedFrom:'csv'
+        })
+      }
+
+      // Skip if nothing at all
+      if(!name && !catMove){ skipped.push(r); return }
     })
 
     if(!built.length){
