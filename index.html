@@ -59,7 +59,7 @@ body {
   -webkit-overflow-scrolling: touch;
   display: none;
 }
-.app-section.active { display: block; }
+.app-section.active { display: block; animation: fadeUp 0.22s ease; }
 
 /* ─── BOTTOM NAV ───────────────────────────────────────────── */
 .bottom-nav {
@@ -714,7 +714,11 @@ function setThemeColor(color) {
 function switchSection(id) {
   document.querySelectorAll('.app-section').forEach(s => s.classList.remove('active'))
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
-  document.getElementById('section-' + id).classList.add('active')
+  const el = document.getElementById('section-' + id)
+  el.classList.add('active')
+  el.style.animation = 'none'
+  void el.offsetHeight
+  el.style.animation = ''
   document.getElementById('nav-' + id).classList.add('active')
   const col = SECTION_COLORS[id] || SECTION_COLORS.today
   setThemeColor(col.theme)
@@ -829,7 +833,7 @@ function _fbPullAll() {
     [_laundryKey(),            `shelter/daily/${d}/laundry`],
     [_countersKey(),           `shelter/daily/${d}/counters`],
     [_extraKey(),              `shelter/daily/${d}/extra`],
-    [_notesKey(),              `shelter/daily/${d}/notes`],
+    ['shelter_notes',          'shelter/notes'],
   ]
   let pending = paths.length
   const done = () => { if (--pending === 0) _fbOnPullComplete() }
@@ -864,7 +868,7 @@ function _fbAttachListeners() {
   const listen = (fbPath, lsKey, handler) => {
     _db.ref(fbPath).on('value', snap => {
       // Skip echoes only for the specific path we just wrote (per-path suppression)
-      if (_fbRecentWrites && _fbRecentWrites[fbPath] && Date.now() - _fbRecentWrites[fbPath] < 150) return
+      if (_fbRecentWrites && _fbRecentWrites[fbPath] && Date.now() - _fbRecentWrites[fbPath] < 400) return
       const val = snap.val()
       if (val !== null) try { localStorage.setItem(lsKey, JSON.stringify(val)) } catch {}
       handler && handler(val)
@@ -878,7 +882,7 @@ function _fbAttachListeners() {
   listen(`shelter/daily/${d}/laundry`,  _laundryKey(),       () => { renderLaundry(); dUpdateProgress() })
   listen(`shelter/daily/${d}/counters`, _countersKey(),      () => { renderCounters(); dUpdateProgress() })
   listen(`shelter/daily/${d}/extra`,    _extraKey(),         () => renderExtraSection())
-  listen(`shelter/daily/${d}/notes`,    _notesKey(),         () => renderExtraSection())
+    listen('shelter/notes',               'shelter_notes',           () => { renderNotesList(document.getElementById('notes-area-wrap')?.parentElement || document.body) })
 }
 
 
@@ -1392,6 +1396,7 @@ function renderToday() {
     const body = document.createElement('div')
     body.className = 'duties-body'
     body.style.paddingBottom = '88px'
+    body.style.animation = 'fadeUp 0.22s ease'
     root.appendChild(body)
 
     // ── Firebase banner ───────────────────────────────────────
@@ -1961,6 +1966,12 @@ function renderEventCard(ev, all, rerender, compact) {
   if (compact) card.style.opacity = '0.7'
   if (isExpanded) card.style.borderColor = col
 
+  // Inner column wrapper — card is display:flex so without this,
+  // topRow and the expanded section sit side-by-side instead of stacked
+  const inner = document.createElement('div')
+  inner.style.cssText = 'display:flex;flex-direction:column;flex:1;min-width:0;width:100%'
+  card.appendChild(inner)
+
   // ── Top row ───────────────────────────────────────────────
   const topRow = document.createElement('div')
   topRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:2px 0'
@@ -1985,7 +1996,7 @@ function renderEventCard(ev, all, rerender, compact) {
       <span class="badge ${isRet?'solo':isMove?'tip':'delegate'}">${isRet?'↩ Return':isMove?'🔄 Move':'🐾 Adoption'}</span>
       <span style="font-size:18px;color:var(--faint);transition:transform .2s;${isExpanded?'transform:rotate(90deg)':''}">›</span>
     </div>`
-  card.appendChild(topRow)
+  inner.appendChild(topRow)
 
   // ── Expanded checklist ───────────────────────────────────
   if (isExpanded) {
@@ -2057,7 +2068,7 @@ function renderEventCard(ev, all, rerender, compact) {
         exp.appendChild(row)
       })
     })
-    card.appendChild(exp)
+    inner.appendChild(exp)
   }
   return card
 }
@@ -2647,11 +2658,10 @@ function showScanSheet(){
     statusDiv.textContent='📤 Analyzing...';statusDiv.style.background='#fdf7e8';statusDiv.style.color='#c98a2a'
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})
-      const resp=await _claudeAPI({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+      const data=await _claudeAPI({model:'claude-haiku-4-5-20251001',max_tokens:1000,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
           {type:'text',text:'This is a printed shelter task checklist. Look at every checkbox. Return ONLY valid JSON: { "type": "tasks"|"meds"|"adoptions"|"unknown", "checkedItems": ["exact text of each checked item"], "summary": "one sentence" }. No explanation outside JSON.'}
         ]}]})
-      const data=await resp.json()
       const raw=data.content?.find(b=>b.type==='text')?.text||'{}'
       const result=JSON.parse(raw.replace(/```json|```/g,'').trim())
       statusDiv.style.background='#edf5ef';statusDiv.style.color='#4e7256'
@@ -2708,11 +2718,11 @@ function dSwitchTab(id, btn) {
 // ═══════════════════════════════════════════════════
 
 function _extraKey(){ return 'shelter_extra_'+todayDateStr() }
-function _notesKey(){ return 'shelter_notes_'+todayDateStr() }
+function _notesKey(){ return 'shelter_notes' }
 function loadExtraTasks(){ try{return JSON.parse(localStorage.getItem(_extraKey())||'[]')}catch{return []} }
 function saveExtraTasks(arr){ try{localStorage.setItem(_extraKey(),JSON.stringify(arr))}catch{} _fbSet('shelter/daily/'+todayDateStr()+'/extra', arr) }
 function loadNotes(){ try{return JSON.parse(localStorage.getItem(_notesKey())||'[]')}catch{return []} }
-function saveNotes(arr){ try{localStorage.setItem(_notesKey(),JSON.stringify(arr))}catch{} _fbSet('shelter/daily/'+todayDateStr()+'/notes', arr) }
+function saveNotes(arr){ try{localStorage.setItem(_notesKey(),JSON.stringify(arr))}catch{} _fbSet('shelter/notes', arr) }
 
 // ── Dynamic wrappers called from renderToday ─────────────────────────────────
 // renderExtraSection() relies on fixed IDs — these build those containers on the fly
@@ -3147,11 +3157,11 @@ function showMedScan() {
     reader.onload = function() {
       var b64 = reader.result.split(',')[1]
       _claudeAPI({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
           messages: [{role:'user', content:[
             {type:'image', source:{type:'base64', media_type:file.type, data:b64}},
-            {type:'text', text:'This is a cat shelter med whiteboard or med sheet. Extract all cat names, medications, doses, units, times (AM/PM), and any dates or notes visible. Return ONLY valid JSON, no explanation:\n{"cats":[{"name":"CatName","room":"Room X","notes":"any notes","meds":[{"name":"MedName","dose":"50","unit":"mg","times":["AM"],"notes":"with food","startDate":"","endDate":""}]}]}\nIf a field is not visible, use empty string. times must be array of "AM" and/or "PM". Do not include markdown.'}
+            {type:'text', text:'You are reading a cat shelter medication board or sheet. Extract every cat and all their medications carefully.\n\nRules:\n- Cat names: use exactly as written (e.g. "Luna", "Mr. Biscuit")\n- Room: look for "Room 1", "Rm 2", "R3", cage numbers, or section labels\n- Med name: full medication name (e.g. "Doxycycline", "Terramycin Eye Ointment", "Pyrantel Dewormer")\n- dose: numeric value only (e.g. "50", "1", "0.5") — no units in this field\n- unit: e.g. "mg", "ml", "drop(s)", "tab(s)", "tsp"\n- times: array containing "AM" and/or "PM" based on schedule shown\n- notes: any instructions like "give with food", "apply to both eyes", "mix into wet food"\n- startDate / endDate: ISO date if visible (YYYY-MM-DD), else empty string\n\nReturn ONLY valid JSON, no explanation, no markdown:\n{"cats":[{"name":"CatName","room":"Room 2","notes":"shy — approach gently","meds":[{"name":"Doxycycline","dose":"50","unit":"mg","times":["AM"],"notes":"give with food","startDate":"","endDate":""}]}]}\n\nIf a field is not visible leave it as empty string. times must always be an array.'}
           ]}]
         })
       .then(function(data) {
@@ -3201,81 +3211,207 @@ function showMedScan() {
 
 function renderMedScanPreview(area, cats, sheet, overlay) {
   area.innerHTML = ''
-  var todayVal = todayDateStr ? todayDateStr() : new Date().toISOString().slice(0,10)
+  // Deep clone so edits don't mutate original
+  var draft = JSON.parse(JSON.stringify(cats))
+  var include = draft.map(function() { return true })
 
-  // Keep track of which cats to import (all checked by default)
-  var include = cats.map(function() { return true })
+  function inp(val, ph, style) {
+    var el = document.createElement('input')
+    el.value = val || ''
+    el.placeholder = ph || ''
+    el.style.cssText = 'border:1px solid #e0d6cc;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;background:#fff;color:#3a2e28;outline:none;' + (style||'')
+    return el
+  }
+  function label(text) {
+    var el = document.createElement('div')
+    el.style.cssText = 'font-size:10px;font-weight:700;color:#b0a898;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;margin-top:7px;'
+    el.textContent = text
+    return el
+  }
 
-  cats.forEach(function(cat, ci) {
+  function buildCard(ci) {
+    var cat = draft[ci]
     var card = document.createElement('div')
     card.style.cssText = 'background:#faf7f2;border:1.5px solid #e8ddd0;border-radius:12px;padding:12px 14px;margin-bottom:10px;'
 
-    var catHeader = document.createElement('div')
-    catHeader.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;'
-    catHeader.innerHTML =
-      '<input type="checkbox" checked style="width:17px;height:17px;cursor:pointer;" id="cat-include-' + ci + '">' +
-      '<div style="flex:1;">' +
-        '<div style="font-weight:700;font-size:14px;color:#3a2e28;">' + (cat.name||'Unknown Cat') + '</div>' +
-        (cat.room ? '<div style="font-size:11.5px;color:#7a6e65;">' + cat.room + '</div>' : '') +
-      '</div>'
-    ;(function(idx) {
-      catHeader.querySelector('input').addEventListener('change', function(e) {
-        include[idx] = e.target.checked
-        card.style.opacity = e.target.checked ? '1' : '0.4'
+    // ── Header row: checkbox + cat name + room ───────────────
+    var hdr = document.createElement('div')
+    hdr.style.cssText = 'display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;'
+
+    var chk = document.createElement('input')
+    chk.type = 'checkbox'; chk.checked = include[ci]
+    chk.style.cssText = 'width:17px;height:17px;cursor:pointer;margin-top:3px;flex-shrink:0;'
+    chk.addEventListener('change', function() {
+      include[ci] = chk.checked
+      card.style.opacity = chk.checked ? '1' : '0.4'
+    })
+
+    var nameBox = inp(cat.name, 'Cat name', 'font-weight:700;font-size:14px;flex:1;min-width:0;')
+    nameBox.addEventListener('input', function() { draft[ci].name = nameBox.value })
+    var roomBox = inp(cat.room, 'Room', 'width:90px;font-size:12px;')
+    roomBox.addEventListener('input', function() { draft[ci].room = roomBox.value })
+
+    var fields = document.createElement('div')
+    fields.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;'
+    fields.appendChild(nameBox)
+    var roomRow = document.createElement('div')
+    roomRow.style.cssText = 'display:flex;align-items:center;gap:6px;'
+    roomRow.appendChild(roomBox)
+
+    // Delete cat button
+    var delCatBtn = document.createElement('button')
+    delCatBtn.textContent = '🗑'
+    delCatBtn.title = 'Remove this cat'
+    delCatBtn.style.cssText = 'background:none;border:none;font-size:14px;cursor:pointer;color:#c4b49a;padding:0 2px;margin-left:auto;flex-shrink:0;'
+    delCatBtn.onclick = function() {
+      draft.splice(ci, 1); include.splice(ci, 1)
+      renderPreviewFull()
+    }
+    roomRow.appendChild(delCatBtn)
+    fields.appendChild(roomRow)
+
+    // Notes
+    var notesBox = inp(cat.notes, 'Cat notes (optional)', 'font-size:11.5px;font-style:italic;color:#7a6e65;width:100%;box-sizing:border-box;')
+    notesBox.addEventListener('input', function() { draft[ci].notes = notesBox.value })
+    fields.appendChild(notesBox)
+    hdr.appendChild(chk); hdr.appendChild(fields)
+    card.appendChild(hdr)
+
+    // ── Meds ─────────────────────────────────────────────────
+    var medSection = document.createElement('div')
+    medSection.style.cssText = 'display:flex;flex-direction:column;gap:5px;'
+
+    var medsTitle = document.createElement('div')
+    medsTitle.style.cssText = 'font-size:10px;font-weight:700;color:#b0a898;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;'
+    medsTitle.textContent = 'Medications'
+    medSection.appendChild(medsTitle)
+
+    function buildMedRow(mi) {
+      var med = draft[ci].meds[mi]
+      var row = document.createElement('div')
+      row.style.cssText = 'background:white;border:1px solid #e8ddd0;border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:4px;'
+
+      // Row 1: name + dose + unit
+      var r1 = document.createElement('div')
+      r1.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;'
+      var medName = inp(med.name, 'Med name', 'flex:1;min-width:80px;font-weight:600;')
+      medName.addEventListener('input', function() { draft[ci].meds[mi].name = medName.value })
+      var doseBox = inp(med.dose, 'Dose', 'width:52px;')
+      doseBox.addEventListener('input', function() { draft[ci].meds[mi].dose = doseBox.value })
+      var unitSel = document.createElement('select')
+      unitSel.style.cssText = 'border:1px solid #e0d6cc;border-radius:6px;padding:4px 6px;font-size:12px;font-family:inherit;background:#fff;color:#3a2e28;'
+      ;['mg','ml','drop(s)','tab(s)','tsp','unit'].forEach(function(u) {
+        var o = document.createElement('option')
+        o.value = u; o.textContent = u
+        if ((med.unit||'mg') === u) o.selected = true
+        unitSel.appendChild(o)
       })
-    })(ci)
-    card.appendChild(catHeader)
+      unitSel.addEventListener('change', function() { draft[ci].meds[mi].unit = unitSel.value })
 
-    if (cat.notes) {
-      var notesEl = document.createElement('div')
-      notesEl.style.cssText = 'font-size:11.5px;color:#7a6e65;font-style:italic;margin-bottom:6px;padding:4px 8px;background:#f5f0e8;border-radius:6px;'
-      notesEl.textContent = cat.notes
-      card.appendChild(notesEl)
-    }
+      // Delete med button
+      var delMed = document.createElement('button')
+      delMed.textContent = '×'
+      delMed.style.cssText = 'background:none;border:none;font-size:18px;cursor:pointer;color:#c4b49a;padding:0 4px;margin-left:auto;line-height:1;flex-shrink:0;'
+      delMed.onclick = function() { draft[ci].meds.splice(mi,1); buildMedsSection() }
+      r1.appendChild(medName); r1.appendChild(doseBox); r1.appendChild(unitSel); r1.appendChild(delMed)
+      row.appendChild(r1)
 
-    var meds = cat.meds || []
-    if (meds.length) {
-      var medList = document.createElement('div')
-      medList.style.cssText = 'display:flex;flex-direction:column;gap:5px;'
-      meds.forEach(function(med) {
-        var medRow = document.createElement('div')
-        medRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:white;border:1px solid #e8ddd0;border-radius:8px;'
-        var timeTags = (med.times || ['AM']).map(function(t) {
-          return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:' + (t==='AM'?'#fff0e8':'#e8f0ff') + ';color:' + (t==='AM'?'#c97b5a':'#5a7ac9') + ';">' + t + '</span>'
-        }).join(' ')
-        medRow.innerHTML =
-          '<div style="flex:1;">' +
-            '<span style="font-size:13px;font-weight:600;color:#3a2e28;">' + (med.name||'Unknown Med') + '</span>' +
-            (med.dose ? ' <span style="font-size:12px;color:#7a6e65;">' + med.dose + ' ' + (med.unit||'') + '</span>' : '') +
-          '</div>' +
-          '<div style="display:flex;gap:4px;align-items:center;">' + timeTags + '</div>' +
-          (med.notes ? '<div style="font-size:11px;color:#b0a898;font-style:italic;">' + med.notes + '</div>' : '')
-        medList.appendChild(medRow)
+      // Row 2: AM/PM toggles + notes
+      var r2 = document.createElement('div')
+      r2.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;'
+
+      ;['AM','PM'].forEach(function(slot) {
+        var btn = document.createElement('button')
+        var active = (med.times||['AM']).includes(slot)
+        btn.textContent = slot
+        btn.style.cssText = 'border:none;border-radius:999px;padding:3px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;' +
+          (active ? 'background:' + (slot==='AM'?'#fff0e8':'#e8f0ff') + ';color:' + (slot==='AM'?'#c97b5a':'#5a7ac9') + ';outline:2px solid ' + (slot==='AM'?'#c97b5a':'#5a7ac9') + ';'
+                  : 'background:#f0ebe4;color:#b0a898;')
+        btn.onclick = function() {
+          var times = draft[ci].meds[mi].times || ['AM']
+          if (times.includes(slot)) {
+            if (times.length > 1) draft[ci].meds[mi].times = times.filter(function(t){return t!==slot})
+          } else {
+            draft[ci].meds[mi].times = times.concat([slot])
+          }
+          buildMedsSection()
+        }
+        r2.appendChild(btn)
       })
-      card.appendChild(medList)
-    } else {
-      var noMed = document.createElement('div')
-      noMed.style.cssText = 'font-size:12px;color:#b0a898;font-style:italic;padding:4px 0;'
-      noMed.textContent = 'No meds detected'
-      card.appendChild(noMed)
-    }
-    area.appendChild(card)
-  })
 
-  var importBtn = document.createElement('button')
-  importBtn.style.cssText = 'width:100%;background:#6a9170;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;margin-bottom:10px;'
-  importBtn.textContent = '✅ Import Selected Cats & Meds'
-  importBtn.onclick = function() {
-    var toImport = cats.filter(function(_, i) { return include[i] })
-    if (!toImport.length) { alert('No cats selected.'); return }
-    if (typeof window._medImport === 'function') {
-      window._medImport(toImport)
-      overlay.remove()
-    } else {
-      alert('Med import not ready — make sure you are on the Meds tab and try again.')
+      var medNotes = inp(med.notes, 'Instructions (e.g. give with food)', 'flex:1;min-width:100px;font-size:11.5px;font-style:italic;')
+      medNotes.addEventListener('input', function() { draft[ci].meds[mi].notes = medNotes.value })
+      r2.appendChild(medNotes)
+      row.appendChild(r2)
+      return row
     }
+
+    function buildMedsSection() {
+      medSection.innerHTML = ''
+      medSection.appendChild(medsTitle)
+      if (draft[ci].meds.length) {
+        draft[ci].meds.forEach(function(_, mi) { medSection.appendChild(buildMedRow(mi)) })
+      } else {
+        var none = document.createElement('div')
+        none.style.cssText = 'font-size:12px;color:#b0a898;font-style:italic;padding:3px 0;'
+        none.textContent = 'No meds — add one below'
+        medSection.appendChild(none)
+      }
+      // Add med button
+      var addMedBtn = document.createElement('button')
+      addMedBtn.textContent = '+ Add medication'
+      addMedBtn.style.cssText = 'background:transparent;border:1.5px dashed #c4b49a;color:#7a6e65;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;margin-top:2px;width:100%;'
+      addMedBtn.onclick = function() {
+        draft[ci].meds.push({name:'',dose:'',unit:'mg',times:['AM'],notes:''})
+        buildMedsSection()
+      }
+      medSection.appendChild(addMedBtn)
+    }
+
+    buildMedsSection()
+    card.appendChild(medSection)
+    return card
   }
-  area.appendChild(importBtn)
+
+  function renderPreviewFull() {
+    area.innerHTML = ''
+    if (!draft.length) {
+      var empty = document.createElement('div')
+      empty.style.cssText = 'text-align:center;font-size:13px;color:#b0a898;padding:20px 0;font-style:italic;'
+      empty.textContent = 'All cats removed. Scan again or cancel.'
+      area.appendChild(empty)
+      return
+    }
+    draft.forEach(function(_, ci) { area.appendChild(buildCard(ci)) })
+
+    // Add another cat button
+    var addCatBtn = document.createElement('button')
+    addCatBtn.textContent = '+ Add a cat manually'
+    addCatBtn.style.cssText = 'width:100%;background:transparent;border:1.5px dashed #c4b49a;color:#7a6e65;border-radius:10px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:8px;'
+    addCatBtn.onclick = function() {
+      draft.push({name:'',room:'',notes:'',meds:[{name:'',dose:'',unit:'mg',times:['AM'],notes:''}]})
+      include.push(true)
+      renderPreviewFull()
+    }
+    area.appendChild(addCatBtn)
+
+    var importBtn = document.createElement('button')
+    importBtn.style.cssText = 'width:100%;background:#6a9170;color:white;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;'
+    importBtn.textContent = '✅ Import Selected Cats & Meds'
+    importBtn.onclick = function() {
+      var toImport = draft.filter(function(_, i) { return include[i] })
+        .filter(function(c) { return c.name.trim() })  // skip nameless
+      if (!toImport.length) { alert('No cats selected or all names are blank.'); return }
+      if (typeof window._medImport === 'function') {
+        window._medImport(toImport); overlay.remove()
+      } else {
+        alert('Med import not ready — make sure you are on the Meds tab and try again.')
+      }
+    }
+    area.appendChild(importBtn)
+  }
+
+  renderPreviewFull()
 }
 
 // Expose globally
@@ -3439,15 +3575,15 @@ function daysRemaining(med) {
 const DEMO_CATS = [
   {id:'c1',name:'Luna',room:'Room 2',colorIdx:0,notes:'Shy — approach gently',
    meds:[{id:'m1',catId:'c1',name:'Doxycycline',dose:'50',unit:'mg',
-     frequency:'course',times:['AM'],startDate:plusDays(todayStr(),-4),endDate:plusDays(todayStr(),6),
+     frequency:'course',times:['AM'],startDate:plusDays(todayDateStr(),-4),endDate:plusDays(todayDateStr(),6),
      totalDoses:2,intervalDays:7,specificDays:[],notes:'Give with food',active:true}]},
   {id:'c2',name:'Mango',room:'Room 4',colorIdx:1,notes:'Very friendly',
    meds:[{id:'m2',catId:'c2',name:'Terramycin Eye Ointment',dose:'1',unit:'drop(s)',
-     frequency:'daily',times:['AM','PM'],startDate:plusDays(todayStr(),-10),endDate:'',
+     frequency:'daily',times:['AM','PM'],startDate:plusDays(todayDateStr(),-10),endDate:'',
      totalDoses:2,intervalDays:7,specificDays:[],notes:'Apply to both eyes',active:true}]},
   {id:'c3',name:'Biscuit',room:'Room 1',colorIdx:2,notes:'Watch for drooling',
    meds:[{id:'m3',catId:'c3',name:'Pyrantel Dewormer',dose:'1',unit:'ml',
-     frequency:'multi_dose',times:['AM'],startDate:todayStr(),endDate:'',
+     frequency:'multi_dose',times:['AM'],startDate:todayDateStr(),endDate:'',
      totalDoses:2,intervalDays:10,specificDays:[],notes:'Mix into wet food',active:true}]},
 ]
 
@@ -3499,20 +3635,41 @@ function MedApp() {
       try {
         const sc=localStorage.getItem('shelter_cats')
         const sl=localStorage.getItem('shelter_logs')
-        setCats(sc?JSON.parse(sc):DEMO_CATS)
+        if (sc) {
+          const parsed = JSON.parse(sc)
+          // Only use real data if it has actual cats (not empty array from bad write)
+          setCats(parsed.length > 0 ? parsed : DEMO_CATS)
+          window._catsFromStorage = parsed.length > 0
+        } else {
+          // No localStorage data — try to wait for Firebase before falling back to demo
+          setCats(null)  // null = waiting for Firebase
+          window._catsFromStorage = false
+          // Show demo after 3s if Firebase hasn't arrived
+          setTimeout(() => {
+            if (!window._catsFromStorage) {
+              setCats(c => c === null ? DEMO_CATS : c)
+            }
+          }, 3000)
+        }
+        const sl=localStorage.getItem('shelter_logs')
         setLogs(sl?JSON.parse(sl):[])
       } catch { setCats(DEMO_CATS); setLogs([]) }
     }
     loadLocal()
     // Register reload hook so Firebase sync can refresh meds data
-    window._fbMedsReload = loadLocal
+    window._fbMedsReload = () => {
+      window._catsFromStorage = true  // Firebase data is always real
+      loadLocal()
+    }
     return () => { if(window._fbMedsReload===loadLocal) window._fbMedsReload=null }
   },[])
 
   useEffect(()=>{
     if(cats!==null){
       try{localStorage.setItem('shelter_cats',JSON.stringify(cats))}catch{}
-      if(typeof _fbSet==='function') _fbSet('shelter/cats', cats)
+      // Only sync to Firebase if this is real user data, not the demo fallback
+      const isDemo = cats.length > 0 && cats[0].id === 'c1' && cats[0].name === 'Luna' && !window._catsFromStorage
+      if(typeof _fbSet==='function' && !isDemo) _fbSet('shelter/cats', cats)
     }
   },[cats])
   useEffect(()=>{
@@ -3525,35 +3682,63 @@ function MedApp() {
   // Expose import function so the med scan overlay can add cats+meds
   useEffect(()=>{
     window._medImport = function(parsedCats) {
-      parsedCats.forEach(function(catData) {
-        var medsData = catData.meds || []
-        var catId = 'c' + Date.now() + Math.random().toString(36).slice(2,6)
-        var today = new Date().toISOString().slice(0,10)
-        setCats(function(prev) {
-          return [...prev, {
-            id: catId,
-            name: catData.name || 'Unknown',
-            room: catData.room || '',
-            notes: catData.notes || '',
-            colorIdx: prev.length % CAT_COLS.length,
-            meds: medsData.map(function(m, mi) {
-              return {
-                id: 'm' + Date.now() + mi,
-                catId: catId,
-                name: m.name || '',
-                dose: m.dose || '',
-                unit: m.unit || 'mg',
-                frequency: 'daily',
-                times: Array.isArray(m.times) && m.times.length ? m.times : ['AM'],
-                startDate: m.startDate || today,
-                endDate: m.endDate || '',
-                totalDoses: 2, intervalDays: 7, specificDays: [],
-                notes: m.notes || '',
-                active: true
-              }
+      var today = new Date().toISOString().slice(0,10)
+      setCats(function(prev) {
+        if (!prev) return prev  // still loading — ignore
+        var updated = prev.slice()
+        parsedCats.forEach(function(catData) {
+          var incomingName = (catData.name || '').toLowerCase().trim()
+          // Try to find existing cat by name (case-insensitive)
+          var existingIdx = updated.findIndex(function(c) {
+            return c.name.toLowerCase().trim() === incomingName
+          })
+          var medsData = catData.meds || []
+          var newMeds = medsData.map(function(m, mi) {
+            var catId = existingIdx >= 0 ? updated[existingIdx].id : 'c' + Date.now() + Math.random().toString(36).slice(2,6)
+            return {
+              id: 'm' + Date.now() + mi + Math.random().toString(36).slice(2,4),
+              catId: catId,
+              name: m.name || '',
+              dose: m.dose || '',
+              unit: m.unit || 'mg',
+              frequency: 'daily',
+              times: Array.isArray(m.times) && m.times.length ? m.times : ['AM'],
+              startDate: m.startDate || today,
+              endDate: m.endDate || '',
+              totalDoses: 2, intervalDays: 7, specificDays: [],
+              notes: m.notes || '',
+              active: true
+            }
+          })
+          if (existingIdx >= 0) {
+            // Cat already exists — update room/notes if provided, merge meds
+            var existing = Object.assign({}, updated[existingIdx])
+            if (catData.room) existing.room = catData.room
+            if (catData.notes) existing.notes = catData.notes
+            // Add meds that don't already exist (match by name, case-insensitive)
+            newMeds.forEach(function(nm) {
+              nm.catId = existing.id
+              var alreadyHas = existing.meds.some(function(em) {
+                return em.name.toLowerCase().trim() === nm.name.toLowerCase().trim()
+              })
+              if (!alreadyHas) existing.meds = existing.meds.concat([nm])
             })
-          }]
+            updated[existingIdx] = existing
+          } else {
+            // New cat — create fresh
+            var catId = 'c' + Date.now() + Math.random().toString(36).slice(2,6)
+            newMeds.forEach(function(m) { m.catId = catId })
+            updated.push({
+              id: catId,
+              name: catData.name || 'Unknown',
+              room: catData.room || '',
+              notes: catData.notes || '',
+              colorIdx: updated.length % CAT_COLS.length,
+              meds: newMeds
+            })
+          }
         })
+        return updated
       })
     }
     return function() { delete window._medImport }
@@ -3577,7 +3762,7 @@ function MedApp() {
 
   const props={cats,logs,toggle,addCat,editCat,delCat,addMed,editMed,delMed}
   const TABS=[['today','☀️','Today'],['cats','🐾','Cats & Meds'],['schedule','📅','Schedule'],['history','📋','History']]
-  const today=todayStr(); let td=0,tdn=0
+  const today=todayDateStr(); let td=0,tdn=0
   cats.forEach(cat=>cat.meds.forEach(med=>{if(!isDue(med,today))return;med.times.forEach(slot=>{td++;if(wasLogged(logs,cat.id,med.id,slot,today))tdn++})}))
 
   return (
@@ -3595,15 +3780,16 @@ function MedApp() {
             <button onClick={()=>window.showPrintSheet&&window.showPrintSheet()} title="Print" style={{background:'rgba(255,255,255,0.22)',border:'1px solid rgba(255,255,255,0.3)',color:'white',borderRadius:20,padding:'5px 10px',fontSize:15,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>🖨️</button>
             <button onClick={()=>window.showMedScan&&window.showMedScan()} style={{background:'rgba(255,255,255,0.22)',border:'1px solid rgba(255,255,255,0.3)',color:'white',borderRadius:20,padding:'5px 10px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>📋 Scan</button>
           </div>
-          <div style={{display:'flex',gap:3}}>
+          <div style={{display:'flex',gap:0}}>
             {TABS.map(([v,icon,label])=>(
               <button key={v} onClick={()=>setTab(v)} style={{
                 background:tab===v?'white':'transparent',
                 color:tab===v?C.sage:'rgba(255,255,255,0.85)',
-                border:'none',borderRadius:'8px 8px 0 0',padding:'7px 13px',
-                cursor:'pointer',fontSize:12,fontWeight:tab===v?700:400,
+                border:'none',borderRadius:'8px 8px 0 0',padding:'8px 10px',
+                cursor:'pointer',fontSize:11.5,fontWeight:tab===v?700:400,
                 fontFamily:'inherit',transition:'all 0.15s',
-                display:'flex',alignItems:'center',gap:4}}>
+                display:'flex',alignItems:'center',justifyContent:'center',
+                gap:3,flex:1,whiteSpace:'nowrap'}}>
                 <span>{icon}</span><span>{label}</span>
               </button>
             ))}
@@ -3613,10 +3799,12 @@ function MedApp() {
 
       {/* Body */}
       <div style={{maxWidth:820,margin:'0 auto',padding:'20px 16px 88px'}}>
-        {tab==='today'    && <TodayView    {...props}/>}
-        {tab==='cats'     && <CatsView     {...props}/>}
-        {tab==='schedule' && <ScheduleView {...props}/>}
-        {tab==='history'  && <HistoryView  {...props}/>}
+        <div key={tab} style={{animation:'fadeUp 0.22s ease'}}>
+          {tab==='today'    && <TodayView    {...props}/>}
+          {tab==='cats'     && <CatsView     {...props}/>}
+          {tab==='schedule' && <ScheduleView {...props}/>}
+          {tab==='history'  && <HistoryView  {...props}/>}
+        </div>
       </div>
     </div>
   )
@@ -3624,7 +3812,7 @@ function MedApp() {
 
 // ── Today ──────────────────────────────────────────────
 function TodayView({cats,logs,toggle}) {
-  const today=todayStr(), buckets={AM:[],PM:[]}
+  const today=todayDateStr(), buckets={AM:[],PM:[]}
   cats.forEach(cat=>cat.meds.forEach(med=>{
     if(!isDue(med,today))return
     med.times.forEach(slot=>buckets[slot].push({cat,med,slot,done:wasLogged(logs,cat.id,med.id,slot,today)}))
@@ -3829,7 +4017,7 @@ function MedForm({initial,onSave,onCancel}) {
   const [unit,sU]=useState(initial?.unit||'mg')
   const [freq,sF]=useState(initial?.frequency||'daily')
   const [times,sT]=useState(initial?.times||['AM'])
-  const [start,sSt]=useState(initial?.startDate||todayStr())
+  const [start,sSt]=useState(initial?.startDate||todayDateStr())
   const [end,sE]=useState(initial?.endDate||'')
   const [totalDoses,sTD]=useState(initial?.totalDoses||2)
   const [ivl,sI]=useState(initial?.intervalDays||7)
@@ -3919,7 +4107,7 @@ function MedForm({initial,onSave,onCancel}) {
 
 // ── Schedule ───────────────────────────────────────────
 function ScheduleView({cats,logs}) {
-  const today = todayStr()
+  const today = todayDateStr()
 
   // Start from Sunday of the week containing "today - 3 days", show 3 full weeks
   const anchor = new Date(plusDays(today, -3) + 'T12:00:00')
@@ -4047,7 +4235,7 @@ function ScheduleView({cats,logs}) {
 
 // ── History ────────────────────────────────────────────
 function HistoryView({cats,logs}) {
-  const today=todayStr()
+  const today=todayDateStr()
   const days=Array.from({length:30},(_,i)=>plusDays(today,-i))
   const catMap=Object.fromEntries(cats.map(c=>[c.id,c]))
   const medMap=Object.fromEntries(cats.flatMap(c=>c.meds.map(m=>[m.id,m])))
