@@ -2241,6 +2241,85 @@ function saveExtraTasks(arr){ try{localStorage.setItem(_extraKey(),JSON.stringif
 function loadNotes(){ try{return JSON.parse(localStorage.getItem(_notesKey())||'[]')}catch{return []} }
 function saveNotes(arr){ try{localStorage.setItem(_notesKey(),JSON.stringify(arr))}catch{} _fbSet('shelter/daily/'+todayDateStr()+'/notes', arr) }
 
+// ── Dynamic wrappers called from renderToday ─────────────────────────────────
+// renderExtraSection() relies on fixed IDs — these build those containers on the fly
+
+function renderExtraTasksList(parentEl) {
+  // Build static scaffold that renderExtraSection() expects, then call it
+  let wrap = document.getElementById('extra-tasks-dynamic')
+  if (!wrap) {
+    wrap = document.createElement('div')
+    wrap.id = 'extra-tasks-dynamic'
+    wrap.style.marginBottom = '20px'
+    // Build the containers renderExtraSection looks for
+    const listEl = document.createElement('div')
+    listEl.id = 'list-extra'
+    wrap.appendChild(listEl)
+    parentEl.appendChild(wrap)
+  }
+  // Render tasks into #list-extra
+  const list = document.getElementById('list-extra')
+  if (!list) return
+  list.innerHTML = ''
+  const svg = `<svg width="11" height="9" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  const tasks = loadExtraTasks()
+  if (!tasks.length) {
+    const empty = document.createElement('div')
+    empty.className = 'task-card'
+    empty.innerHTML = `<div class="task-body" style="padding-left:8px;color:var(--light);font-style:italic;font-size:13px;text-align:center">No extra tasks added yet</div>`
+    list.appendChild(empty)
+    return
+  }
+  tasks.forEach((task, i) => {
+    const card = document.createElement('div')
+    card.className = 'task-card stripe-terra' + (task.done ? ' done' : '')
+    card.innerHTML = `<div class="task-checkbox">${svg}</div><div class="task-body"><div class="task-name">${task.name}</div>${task.note?`<div class="task-meta"><span class="badge tip">💡 ${task.note}</span></div>`:''}</div><div style="display:flex;gap:4px;flex-shrink:0;align-items:center;margin-left:auto;" onclick="event.stopPropagation()"><button onclick="editExtraTask(${i})" style="background:transparent;border:1px solid var(--sand);color:var(--mid);border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:inherit;">✎</button><button onclick="deleteExtraTask(${i})" style="background:transparent;border:none;color:#c4b49a;font-size:16px;cursor:pointer;padding:4px 6px;line-height:1;">×</button></div>`
+    card.addEventListener('click', e => {
+      if (e.target.tagName === 'BUTTON') return
+      const t = loadExtraTasks(); t[i].done = !t[i].done
+      saveExtraTasks(t); renderExtraTasksList(wrap.parentElement); dUpdateProgress()
+    })
+    list.appendChild(card)
+  })
+}
+
+function renderNotesList(parentEl) {
+  let wrap = document.getElementById('notes-dynamic')
+  if (!wrap) {
+    wrap = document.createElement('div')
+    wrap.id = 'notes-dynamic'
+    wrap.id = 'notes-area-wrap'  // also keep the ID showAddNote() expects
+    wrap.style.marginBottom = '20px'
+    const notesListEl = document.createElement('div')
+    notesListEl.id = 'notes-list'
+    wrap.appendChild(notesListEl)
+    parentEl.appendChild(wrap)
+  }
+  const notesList = document.getElementById('notes-list')
+  if (!notesList) return
+  notesList.innerHTML = ''
+  const notes = loadNotes()
+  if (!notes.length) {
+    const empty = document.createElement('div')
+    empty.className = 'task-card'
+    empty.innerHTML = `<div class="task-body" style="padding-left:8px;color:var(--light);font-style:italic;font-size:13px;text-align:center">No notes yet</div>`
+    notesList.appendChild(empty)
+    return
+  }
+  notes.forEach((note, i) => {
+    const row = document.createElement('div')
+    row.className = 'task-card' + (note.urgent ? ' stripe-rose' : ' stripe-sage')
+    row.style.marginBottom = '6px'
+    row.innerHTML = `<div style="font-size:17px;flex-shrink:0;margin-right:2px">${note.urgent?'🔴':'📌'}</div><div class="task-body"><div class="task-name">${note.text}</div></div><div style="display:flex;gap:4px;flex-shrink:0;align-items:center;" onclick="event.stopPropagation()"><button onclick="editNote(${i})" style="background:transparent;border:1px solid var(--sand);color:var(--mid);border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:inherit;">✎</button><button onclick="deleteNote(${i})" style="background:transparent;border:none;color:#c4b49a;font-size:16px;cursor:pointer;padding:4px 6px;line-height:1;">×</button></div>`
+    notesList.appendChild(row)
+  })
+}
+
+// Patch saveNote and saveExtraTask to re-render the dynamic lists
+const _origSaveNote = typeof saveNote !== 'undefined' ? saveNote : null
+// (patches applied after function definitions below)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function renderExtraSection(){
   const list = document.getElementById('list-extra')
   const notesList = document.getElementById('notes-list')
@@ -2296,11 +2375,13 @@ function saveExtraTask(){
   saveExtraTasks(tasks)
   document.getElementById('extra-task-form').remove()
   renderExtraSection()
+  const dyn=document.getElementById('extra-tasks-dynamic'); if(dyn) renderExtraTasksList(dyn.parentElement)
 }
 
 function deleteExtraTask(i){
   const tasks=loadExtraTasks(); tasks.splice(i,1)
   saveExtraTasks(tasks); renderExtraSection()
+  const dyn=document.getElementById('extra-tasks-dynamic'); if(dyn) renderExtraTasksList(dyn.parentElement)
 }
 
 function editExtraTask(i){
@@ -2356,6 +2437,7 @@ function saveNote(){
 function deleteNote(i){
   const notes=loadNotes(); notes.splice(i,1)
   saveNotes(notes); renderExtraSection()
+  const dyn=document.getElementById('notes-area-wrap'); if(dyn) renderNotesList(dyn.parentElement)
 }
 
 function editNote(i){
