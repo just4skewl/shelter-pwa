@@ -1527,8 +1527,8 @@ function showCsvImport(container, events, rerender) {
   // File input area
   const fileBtn = _el('button', {style:{width:'100%', background:'#3a3530', color:'white', border:'none',
     borderRadius:10, padding:'12px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
-    marginBottom:8}, onclick:()=>fileInput.click()}, '📂  Choose CSV File')
-  const fileInput = _el('input', {type:'file', accept:'.csv,text/csv,text/plain', style:{display:'none'}})
+    marginBottom:8}, onclick:()=>fileInput.click()}, '📂  Choose File  (CSV from Files, Drive, or any app)')
+  const fileInput = _el('input', {type:'file', accept:'*', style:{display:'none'}})
   panel.appendChild(fileBtn)
   panel.appendChild(fileInput)
 
