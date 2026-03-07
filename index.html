@@ -1996,6 +1996,8 @@ function renderAdoptionsTab(){
 
     const accentColor  = _apptTab === 'shadow' ? '#5a7a9a' : isAdopt ? '#7a5090' : '#b05070'
     const accentBorder = _apptTab === 'shadow' ? '#a8c0d8' : isAdopt ? '#c8aae0' : '#e8b4c4'
+    // Keep status bar / notification area in sync with the active sub-tab color
+    setThemeColor(accentColor)
 
     // ── Header — exact .duties-header class ──────────────────
     const hdr = document.createElement('div')
@@ -2140,6 +2142,12 @@ function renderEventCard(ev, all, rerender, compact) {
   card.style.boxSizing = 'border-box'
   card.style.width = '100%'
   if (compact) card.style.opacity = '0.7'
+  if (ev.status === 'noshow') {
+    card.style.opacity = '0.6'
+    card.style.borderColor = '#f0c090'
+    card.style.borderLeftColor = '#c06020'
+    card.style.borderLeftWidth = '4px'
+  }
   if (isExpanded) card.style.borderColor = col
 
   // Inner column wrapper — card is display:flex so without this,
@@ -2159,7 +2167,7 @@ function renderEventCard(ev, all, rerender, compact) {
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
         <span class="task-name" style="font-weight:800;font-size:14px">${ev.adopterName||'Adopter'}</span>
         ${ev.time?`<span class="badge" style="background:${pale};color:${col};border-color:${col}44">${ev.time}</span>`:''}
-        ${ev.status==='completed'?'<span class="badge delegate">✓ Done</span>':''}
+        ${ev.status==='completed'?'<span class="badge delegate">✓ Done</span>':ev.status==='noshow'?'<span class="badge" style="background:#fff0e8;color:#c06020;border:1.5px solid #f0c090;">🚫 No Show</span>':''}
       </div>
       ${ev.cats&&ev.cats.length?`<div style="font-size:12px;color:var(--mid);margin-bottom:3px">🐱 ${ev.cats.join(', ')}</div>`:''}
       ${ev.notes?`<div style="font-size:11.5px;color:var(--mid);font-style:italic;margin-bottom:3px;line-height:1.45;white-space:normal">${ev.notes}</div>`:''}
@@ -2205,7 +2213,20 @@ function renderEventCard(ev, all, rerender, compact) {
     delBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap'
     delBtn.textContent = '🗑 Remove'
     delBtn.onclick = e => { e.stopPropagation(); if(confirm(`Remove ${ev.adopterName}?`)){const evts=loadEvents().filter(x=>x.id!==ev.id);saveEvents(evts);rerender()} }
-    actRow.append(editBtn, doneBtn, delBtn)
+    // No-show button (adoptions only — makes no sense for returns/moves)
+    if (!isRet && !isMove) {
+      const noshowBtn = document.createElement('button')
+      noshowBtn.className = 'badge'
+      noshowBtn.style.cssText = 'cursor:pointer;border:1.5px solid #f0c090;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap;background:#fff8f0;color:#c06020;'
+      noshowBtn.textContent = ev.status === 'noshow' ? '↩ Reopen' : '🚫 No Show'
+      noshowBtn.onclick = e => {
+        e.stopPropagation()
+        _updateEvtStatus(ev.id, ev.status === 'noshow' ? 'scheduled' : 'noshow', all, rerender)
+      }
+      actRow.append(editBtn, doneBtn, noshowBtn, delBtn)
+    } else {
+      actRow.append(editBtn, doneBtn, delBtn)
+    }
     exp.appendChild(actRow)
 
     // Checklist sections
