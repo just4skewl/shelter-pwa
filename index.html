@@ -958,229 +958,203 @@ function _el(tag,attrs,...children){
 // ═══════════════════════════════════════════════════
 
 function renderToday() {
-  const root=document.getElementById('today-root')
-  if(!root)return
-  root.innerHTML=''
-  try{
-    const events=loadEvents()
-    const todayEvs=events.filter(a=>a.date===todayDateStr()).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const conflicts=detectConflicts(events)
-    const meds=getMedsDueSummary()
-    const tasks=getTaskProgress()
-    const now=new Date(), hour=now.getHours()
-    const greeting=hour<12?'Good morning ☀️':hour<17?'Good afternoon 🌿':'Good evening 🌙'
-    const dateStr=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+  const root = document.getElementById('today-root')
+  if (!root) return
+  root.innerHTML = ''
+  try {
+    const events  = loadEvents()
+    const todayEvs = events.filter(a => a.date === todayDateStr()).sort((a,b) => _parseTime(a.time) - _parseTime(b.time))
+    const conflicts = detectConflicts(events)
+    const meds  = getMedsDueSummary()
+    const tasks = getTaskProgress()
+    const now   = new Date(), hour = now.getHours()
+    const greeting = hour < 12 ? 'Good morning ☀️' : hour < 17 ? 'Good afternoon 🌿' : 'Good evening 🌙'
+    const dateStr  = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'})
 
-    // ── Header (matches Duties warm terracotta style) ──
-    const hdr=_el('div',{style:{background:'var(--terra)',padding:'16px 18px 18px',position:'sticky',
-      top:0,zIndex:20,boxShadow:'0 2px 12px rgba(201,123,90,0.3)'}},
-      _el('div',{style:{display:'flex',alignItems:'center',gap:12}},
-        _el('span',{style:{fontSize:26}},'🏠'),
-        _el('div',{style:{flex:1}},
-          _el('div',{style:{display:'flex',alignItems:'center',gap:7}},
-            _el('div',{style:{color:'white',fontWeight:800,fontSize:18,letterSpacing:'-0.02em',lineHeight:1.2,
-              fontFamily:"'Playfair Display',serif"}},greeting),
-            // Sync status dot
-            _el('div',{id:'sync-badge',title:'Checking sync...',style:{
-              width:8,height:8,borderRadius:'50%',background:'#b0a898',flexShrink:0,
-              marginTop:2,transition:'background 0.4s',opacity:0.85,cursor:'help'}})
-          ),
-          _el('div',{style:{color:'rgba(255,255,255,0.72)',fontSize:11.5,marginTop:2}},dateStr)
-        ),
-        _el('button',{style:{background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.3)',
-          color:'white',borderRadius:20,padding:'6px 13px',fontSize:11.5,fontWeight:700,
-          cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'},onclick:()=>showPrintSheet()},'🖨️ Print')
-      )
-    )
+    // ── HEADER — identical markup to .duties-header ──────────
+    const hdr = document.createElement('div')
+    hdr.className = 'duties-header'
+    hdr.innerHTML = `
+      <div class="duties-header-top">
+        <span style="font-size:26px;line-height:1">🏠</span>
+        <div style="flex:1">
+          <div class="duties-title" style="display:flex;align-items:center;gap:8px">
+            ${greeting}
+            <div id="sync-badge" title="Checking sync…"
+              style="width:8px;height:8px;border-radius:50%;background:#b0a898;flex-shrink:0;transition:background .4s;opacity:.85;cursor:help"></div>
+          </div>
+          <div class="duties-sub">${dateStr}</div>
+        </div>
+        <button onclick="showPrintSheet()"
+          style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+          🖨️ Print
+        </button>
+      </div>`
     root.appendChild(hdr)
 
-    const body=_el('div',{style:{padding:'18px 16px 88px',display:'flex',flexDirection:'column',gap:14}})
+    // ── BODY ─────────────────────────────────────────────────
+    const body = document.createElement('div')
+    body.className = 'duties-body'
+    body.style.cssText = 'display:flex;flex-direction:column;gap:0;padding-bottom:88px'
     root.appendChild(body)
 
-    // ── Firebase setup banner (shown until configured) ──
-    if(!_fbConfigured()){
-      body.appendChild(_el('div',{style:{background:'#fdf7e0',border:'1.5px solid #e8c84a',
-        borderRadius:13,padding:'13px 16px',display:'flex',gap:10,alignItems:'flex-start',
-        position:'relative',overflow:'hidden'}},
-        _el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'#c9a020'}}),
-        _el('div',{style:{paddingLeft:6}},
-          _el('div',{style:{fontWeight:700,fontSize:12.5,color:'#7a5500',marginBottom:3}},
-            '🔥 Firebase sync not configured yet'),
-          _el('div',{style:{fontSize:11.5,color:'#6a4400',lineHeight:1.5}},
-            'Data is saving locally on this device only. Set up Firebase to sync across your phone & computer. ' +
-            'See the setup guide below or ask Claude for help!')
-        )
-      ))
+    // ── Firebase banner ──────────────────────────────────────
+    if (!_fbConfigured()) {
+      const fb = document.createElement('div')
+      fb.style.cssText = 'background:#fdf7e0;border:1.5px solid #e8c84a;border-radius:13px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.5'
+      fb.innerHTML = '🔥 <strong>Firebase sync not configured</strong> — data saves locally only.'
+      body.appendChild(fb)
     }
 
-    // ── Conflict alert ───────────────────────────────
-    if(conflicts.length>0){
-      body.appendChild(_el('div',{style:{background:'#fffbf0',border:'1.5px solid #f0c94a',
-        borderRadius:13,padding:'12px 14px',display:'flex',gap:10,alignItems:'flex-start',
-        position:'relative',overflow:'hidden'}},
-        _el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'#c98a2a'}}),
-        _el('span',{style:{fontSize:18,flexShrink:0,paddingLeft:8}},'⚠️'),
-        _el('div',{style:{flex:1}},
-          _el('div',{style:{fontWeight:700,fontSize:12.5,color:'#7a5500',marginBottom:3}},
-            `${conflicts.length} schedule conflict${conflicts.length>1?'s':''} today`),
-          ...conflicts.map(c=>_el('div',{style:{fontSize:11.5,color:'#6a4400',lineHeight:1.4}},c.msg))
-        )
-      ))
+    // ── Conflict alert ───────────────────────────────────────
+    if (conflicts.length > 0) {
+      const al = document.createElement('div')
+      al.style.cssText = 'background:#fffbf0;border:1.5px solid #f0c94a;border-radius:13px;padding:11px 14px;font-size:12px;color:#7a5500;margin-bottom:16px;line-height:1.6'
+      al.innerHTML = '⚠️ <strong>' + conflicts.length + ' schedule conflict' + (conflicts.length > 1 ? 's' : '') + ' today</strong><br>'
+        + conflicts.map(c => '<span style="font-size:11.5px">' + c.msg + '</span>').join('<br>')
+      body.appendChild(al)
     }
 
-    // ── Stat cards row ───────────────────────────────
-    const taskPct=tasks.total>0?Math.round(tasks.done/tasks.total*100):0
-    const medPct=meds.total>0?Math.round(meds.doneCount/meds.total*100):0
-    const statRow=_el('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}})
-
-    const makeStatCard=(icon,label,pct,subLabel,accentColor,borderColor,section)=>{
-      const card=_el('div',{style:{background:'var(--warm-white)',borderRadius:14,padding:'14px 16px',
-        border:`1.5px solid ${borderColor}`,cursor:'pointer',position:'relative',overflow:'hidden',
-        transition:'transform 0.15s'},onclick:()=>switchSection(section)})
-      card.addEventListener('mousedown',()=>card.style.transform='scale(0.97)')
-      card.addEventListener('mouseup',()=>card.style.transform='')
-      card.addEventListener('mouseleave',()=>card.style.transform='')
-      // left accent stripe
-      card.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:accentColor}}))
-      card.appendChild(_el('div',{style:{paddingLeft:8}},
-        _el('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:8}},
-          _el('span',{style:{fontSize:18}},(icon)),
-          _el('span',{style:{fontSize:10,fontWeight:700,color:'var(--light)',letterSpacing:'0.06em',
-            textTransform:'uppercase'}},(label))
-        ),
-        _el('div',{style:{fontSize:26,fontWeight:800,color:pct===100?'var(--sage)':'var(--ink)',
-          letterSpacing:'-0.03em',lineHeight:1}},`${pct}%`),
-        _el('div',{style:{fontSize:11,color:'var(--mid)',marginBottom:8,marginTop:2}},subLabel),
-        _el('div',{style:{height:4,background:'var(--faint)',borderRadius:999,overflow:'hidden'}},
-          _el('div',{style:{height:'100%',borderRadius:999,width:`${pct}%`,transition:'width 0.5s',
-            background:pct===100?'var(--sage)':accentColor}}))
-      ))
+    // ── Progress stats — 2-col grid, same card style as task-cards ──
+    const taskPct = tasks.total > 0 ? Math.round(tasks.done / tasks.total * 100) : 0
+    const medPct  = meds.total  > 0 ? Math.round(meds.doneCount / meds.total * 100) : 0
+    const grid = document.createElement('div')
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px'
+    const makeStatCard = (icon, label, pct, sub, accent, section) => {
+      const card = document.createElement('div')
+      card.className = 'task-card'
+      card.style.cssText = `flex-direction:column;align-items:stretch;gap:0;padding:13px 14px 11px;cursor:pointer;border-left:3px solid ${accent}`
+      card.onclick = () => switchSection(section)
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <span style="font-size:17px">${icon}</span>
+          <span class="task-name" style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--light)">${label}</span>
+        </div>
+        <div style="font-size:26px;font-weight:800;color:${pct===100?'var(--sage)':'var(--ink)'};letter-spacing:-.03em;line-height:1">${pct}%</div>
+        <div style="font-size:11px;color:var(--mid);margin:2px 0 8px">${sub}</div>
+        <div style="height:4px;background:var(--faint);border-radius:999px;overflow:hidden">
+          <div style="height:100%;border-radius:999px;width:${pct}%;transition:width .5s;background:${pct===100?'var(--sage)':accent}"></div>
+        </div>`
       return card
     }
+    grid.appendChild(makeStatCard('📋', 'Tasks', taskPct,
+      taskPct === 100 ? 'All done! ✅' : `${tasks.done} of ${tasks.total} done`, 'var(--terra)', 'duties'))
+    grid.appendChild(makeStatCard('💊', 'Meds', medPct,
+      meds.total === 0 ? 'None today' : medPct === 100 ? 'All given! ✅' : `${meds.doneCount} of ${meds.total} given`, 'var(--sage)', 'meds'))
+    body.appendChild(grid)
 
-    statRow.appendChild(makeStatCard('📋','Tasks',taskPct,
-      taskPct===100?'All done! ✅':`${tasks.done} of ${tasks.total} done`,
-      'var(--terra)','var(--terra-light)','duties'))
-    statRow.appendChild(makeStatCard('💊','Meds',medPct,
-      meds.total===0?'None today':medPct===100?'All given! ✅':`${meds.doneCount} of ${meds.total} given`,
-      'var(--sage)','var(--sage-light)','meds'))
-    body.appendChild(statRow)
+    // ── Pending meds ─────────────────────────────────────────
+    if (meds.pending.length > 0) {
+      const sl = document.createElement('div')
+      sl.className = 'section-label'
+      sl.style.color = 'var(--sage)'
+      sl.innerHTML = '💊 Meds Due Today <button onclick="switchSection(\'meds\')" style="font-family:inherit;background:transparent;border:none;color:var(--sage);font-size:.75rem;font-weight:700;cursor:pointer;margin-left:4px">View all →</button>'
+      body.appendChild(sl)
 
-    // ── Pending meds ─────────────────────────────────
-    if(meds.pending.length>0){
-      const secLabel=_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',color:'var(--sage)',
-        display:'flex',alignItems:'center',gap:10,marginBottom:4}},
-        '💊 Meds Due Today',
-        _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,var(--sage-light),transparent)'}}),
-        _el('button',{style:{fontFamily:'inherit',background:'transparent',border:'none',color:'var(--sage)',
-          fontSize:'0.78rem',fontWeight:700,cursor:'pointer',flexShrink:0},
-          onclick:()=>switchSection('meds')},'View all →')
-      )
-      body.appendChild(secLabel)
-
-      const medCard=_el('div',{style:{background:'var(--warm-white)',borderRadius:14,
-        border:'1.5px solid var(--sage-light)',overflow:'hidden',position:'relative'}})
-      medCard.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:'var(--sage)'}}))
-      ;['AM','PM'].forEach(slot=>{
-        const items=meds.pending.filter(i=>i.slot===slot)
-        if(!items.length)return
-        const slotColor=slot==='AM'?'var(--terra)':'#5a68a0'
-        const slotBg=slot==='AM'?'var(--amber-pale)':'#f0f0fa'
-        medCard.appendChild(_el('div',{style:{padding:'6px 14px 4px 18px',
-          fontSize:10,fontWeight:700,color:slotColor,letterSpacing:'0.06em',
-          background:slotBg,borderBottom:'1px solid var(--sand-light)'}},
-          slot==='AM'?'☀️  MORNING':'🌙  AFTERNOON'))
-        items.forEach(({cat,med,color})=>{
-          medCard.appendChild(_el('div',{style:{display:'flex',alignItems:'center',
-            gap:10,padding:'8px 14px 8px 18px',borderBottom:'1px solid var(--faint)'}},
-            _el('div',{style:{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}),
-            _el('span',{style:{fontWeight:600,fontSize:13,flex:1,color:'var(--ink)'}},cat.name),
-            _el('span',{style:{fontSize:11.5,color:'var(--mid)'}},`${med.name} · ${med.dose} ${med.unit}`)
-          ))
+      ;['AM', 'PM'].forEach(slot => {
+        const items = meds.pending.filter(i => i.slot === slot)
+        if (!items.length) return
+        const block = document.createElement('div')
+        block.className = 'time-block'
+        block.innerHTML = `<div class="time-header">
+          <span class="time-tag ${slot === 'AM' ? 'am' : 'pm'}">${slot === 'AM' ? '☀️ AM' : '🌙 PM'}</span>
+          <span class="time-range">${slot === 'AM' ? 'Morning doses' : 'Afternoon doses'}</span>
+        </div>`
+        const list = document.createElement('div')
+        list.className = 'task-list'
+        items.forEach(({cat, med, color}) => {
+          const card = document.createElement('div')
+          card.className = 'task-card'
+          card.style.cssText = `cursor:default;border-left:3px solid var(--sage)`
+          card.innerHTML = `
+            <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;margin-top:2px"></div>
+            <div class="task-body">
+              <div class="task-name">${cat.name}</div>
+              <div class="task-meta">
+                <span class="badge tip">💊 ${med.name} · ${med.dose} ${med.unit}</span>
+              </div>
+            </div>`
+          list.appendChild(card)
         })
+        block.appendChild(list)
+        body.appendChild(block)
       })
-      body.appendChild(medCard)
     }
 
-    // ── Today's appointments ──────────────────────────
-    const hasEvents=todayEvs.length>0
-    const apptLabel=_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',color:'#7a5090',
-      display:'flex',alignItems:'center',gap:10,marginBottom:4}},
-      `🐾 Today's Appointments${hasEvents?' ('+todayEvs.length+')':''}`,
-      _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,#c8aae0,transparent)'}}),
-      _el('button',{style:{fontFamily:'inherit',background:'transparent',border:'none',color:'#7a5090',
-        fontSize:'0.78rem',fontWeight:700,cursor:'pointer',flexShrink:0},
-        onclick:()=>switchSection('adoptions')},'Manage →')
-    )
-    body.appendChild(apptLabel)
+    // ── Today's appointments ─────────────────────────────────
+    const hasEvents = todayEvs.length > 0
+    const apptSL = document.createElement('div')
+    apptSL.className = 'section-label'
+    apptSL.style.color = '#7a5090'
+    apptSL.innerHTML = `🐾 Today's Appointments${hasEvents ? ' (' + todayEvs.length + ')' : ''} <button onclick="switchSection('adoptions')" style="font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.75rem;font-weight:700;cursor:pointer;margin-left:4px">Manage →</button>`
+    body.appendChild(apptSL)
 
-    if(!hasEvents){
-      body.appendChild(_el('div',{style:{background:'var(--warm-white)',border:'1.5px solid var(--sand-light)',
-        borderRadius:13,padding:'20px',textAlign:'center',color:'var(--light)',fontSize:13,
-        fontStyle:'italic'}},'No appointments scheduled for today'))
+    const apptBlock = document.createElement('div')
+    apptBlock.className = 'time-block'
+    const apptList = document.createElement('div')
+    apptList.className = 'task-list'
+    apptList.style.marginBottom = '20px'
+
+    if (!hasEvents) {
+      const empty = document.createElement('div')
+      empty.className = 'task-card'
+      empty.style.cssText = 'cursor:default;color:var(--light);font-style:italic;font-size:.84rem;justify-content:center'
+      empty.textContent = 'No appointments scheduled for today'
+      apptList.appendChild(empty)
     } else {
-      const apptList=_el('div',{style:{display:'flex',flexDirection:'column',gap:8}})
-      todayEvs.forEach(ev=>{
-        const isReturn=ev.type==='return'
-        const col=isReturn?'#b05070':'#7a5090'
-        const pale=isReturn?'#fdf0f3':'#f0eaf8'
-        const done=ev.checklist||{}
-        const checklist=isReturn?RETURN_CHECKLIST:[...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
-        const doneSteps=checklist.filter(s=>done[s.id]).length
-        const card=_el('div',{style:{background:'var(--warm-white)',border:`1.5px solid ${isReturn?'#e8b4c4':'#c8aae0'}`,
-          borderRadius:13,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,
-          cursor:'pointer',position:'relative',overflow:'hidden',transition:'transform 0.15s'},
-          onclick:()=>switchSection('adoptions')})
-        card.addEventListener('mousedown',()=>card.style.transform='scale(0.98)')
-        card.addEventListener('mouseup',()=>card.style.transform='')
-        card.addEventListener('mouseleave',()=>card.style.transform='')
-        card.appendChild(_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,background:col}}))
-        card.appendChild(_el('div',{style:{width:34,height:34,borderRadius:10,background:pale,
-          display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16,
-          marginLeft:8}},(isReturn?'↩':'🐾')))
-        const info=_el('div',{style:{flex:1,minWidth:0}})
-        info.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
-          _el('span',{style:{fontWeight:700,fontSize:13.5,color:'var(--ink)'}},ev.adopterName||'Adopter'),
-          ev.time&&_el('span',{style:{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:999,
-            background:pale,color:col}},ev.time),
-          ...(isReturn?[_el('span',{class:'badge',style:{fontSize:'0.62rem',fontWeight:700,padding:'2px 8px',
-            borderRadius:999,background:'#fdf0f3',color:'#b05070',border:'1px solid #e8b4c4',
-            letterSpacing:'0.04em'}},'↩ Return')]:[])
-        ))
-        if(ev.cats&&ev.cats.length>0)
-          info.appendChild(_el('div',{style:{fontSize:11.5,color:'var(--mid)',marginTop:2}},
-            '🐱 '+ev.cats.join(', ')))
-        // mini progress
-        info.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:8,marginTop:6}},
-          _el('div',{style:{flex:1,height:3,background:'var(--faint)',borderRadius:999,overflow:'hidden'}},
-            _el('div',{style:{height:'100%',borderRadius:999,background:col,transition:'width 0.3s',
-              width:`${checklist.length>0?doneSteps/checklist.length*100:0}%`}})),
-          _el('span',{style:{fontSize:10,color:col,fontWeight:700,flexShrink:0}},`${doneSteps}/${checklist.length}`)
-        ))
-        card.appendChild(info)
+      todayEvs.forEach(ev => {
+        const isReturn = ev.type === 'return'
+        const col  = isReturn ? '#b05070' : '#7a5090'
+        const pale = isReturn ? '#fdf0f3' : '#f0eaf8'
+        const allSteps = isReturn ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before, ...ADOPTION_CHECKLIST.during, ...ADOPTION_CHECKLIST.after]
+        const doneSteps = allSteps.filter(s => (ev.checklist || {})[s.id]).length
+        const card = document.createElement('div')
+        card.className = 'task-card'
+        card.style.cssText = `cursor:pointer;border-left:3px solid ${col}`
+        card.onclick = () => switchSection('adoptions')
+        card.innerHTML = `
+          <div style="width:34px;height:34px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">${isReturn ? '↩' : '🐾'}</div>
+          <div class="task-body">
+            <div class="task-name">${ev.adopterName || 'Adopter'}</div>
+            <div class="task-meta">
+              ${ev.time ? `<span class="badge quick" style="background:${pale};color:${col};border-color:${col}44">🕐 ${ev.time}</span>` : ''}
+              ${isReturn ? '<span class="badge solo">↩ Return</span>' : '<span class="badge delegate">🐾 Adoption</span>'}
+              ${ev.cats && ev.cats.length ? `<span class="badge tip">🐱 ${ev.cats.join(', ')}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
+              <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden">
+                <div style="height:100%;border-radius:999px;background:${col};width:${allSteps.length > 0 ? doneSteps/allSteps.length*100 : 0}%;transition:width .3s"></div>
+              </div>
+              <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneSteps}/${allSteps.length}</span>
+            </div>
+          </div>`
         apptList.appendChild(card)
       })
-      body.appendChild(apptList)
     }
+    apptBlock.appendChild(apptList)
+    body.appendChild(apptBlock)
 
-    // ── Scan button ───────────────────────────────────
-    body.appendChild(_el('button',{style:{background:'var(--warm-white)',
-      border:'1.5px solid var(--sand)',color:'var(--mid)',borderRadius:12,padding:'11px',
-      fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',
-      width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-      marginTop:4},onclick:()=>showScanSheet()},'📷  Scan printed checklist to sync'))
+    // ── Scan button ──────────────────────────────────────────
+    const scanWrap = document.createElement('div')
+    scanWrap.className = 'time-block'
+    scanWrap.innerHTML = `<div class="task-list">
+      <div class="task-card" onclick="showScanSheet()" style="cursor:pointer;justify-content:center;color:var(--mid);font-size:12px;font-weight:600;gap:8px">
+        📷 Scan printed checklist to sync
+      </div>
+    </div>`
+    body.appendChild(scanWrap)
 
-    // ── Footer ────────────────────────────────────────
-    body.appendChild(_el('div',{style:{textAlign:'center',fontFamily:"'Caveat',cursive",
-      fontSize:'1.1rem',color:'var(--sand-dark)',paddingTop:8,paddingBottom:4,opacity:0.8}},
-      'made with 🤎 for Michi & the cats 🐾'))
+    // ── Footer ───────────────────────────────────────────────
+    const footer = document.createElement('div')
+    footer.style.cssText = "text-align:center;padding:28px 0 8px;font-family:'Caveat',cursive;font-size:1.1rem;color:var(--sand-dark)"
+    footer.innerHTML = 'made with <span style="color:var(--terra)">♥</span> for Michi & the cats 🐾'
+    body.appendChild(footer)
 
-  }catch(err){
-    root.innerHTML=`<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
+  } catch(err) {
+    root.innerHTML = `<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
     console.error(err)
   }
 }
-
 // ═══════════════════════════════════════════════════
 // ADOPTIONS TAB
 // ═══════════════════════════════════════════════════
@@ -1188,215 +1162,282 @@ function renderToday() {
 let _apptTab='adoptions'
 let _expandedEvent=null
 
-function renderAdoptionsTab(){
-  const root=document.getElementById('adoptions-root')
-  if(!root)return
-  const scrollEl=root.closest('.app-section')||root.parentElement
-  const savedScroll=scrollEl?scrollEl.scrollTop:0
-  root.innerHTML=''
-  try{
-    const events=loadEvents()
-    const today=todayDateStr()
-    const todayAdoptions=events.filter(e=>e.date===today&&e.type!=='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const todayReturns=events.filter(e=>e.date===today&&e.type==='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const pastAdoptions=events.filter(e=>e.date<today&&e.type!=='return').sort((a,b)=>b.date.localeCompare(a.date))
-    const pastReturns=events.filter(e=>e.date<today&&e.type==='return').sort((a,b)=>b.date.localeCompare(a.date))
+function renderAdoptionsTab() {
+  const root = document.getElementById('adoptions-root')
+  if (!root) return
+  const scrollEl = root.closest('.app-section') || root.parentElement
+  const savedScroll = scrollEl ? scrollEl.scrollTop : 0
+  root.innerHTML = ''
+  try {
+    const events = loadEvents()
+    const today  = todayDateStr()
+    const todayAdoptions = events.filter(e => e.date===today && e.type!=='return').sort((a,b) => _parseTime(a.time)-_parseTime(b.time))
+    const todayReturns   = events.filter(e => e.date===today && e.type==='return' ).sort((a,b) => _parseTime(a.time)-_parseTime(b.time))
+    const pastAdoptions  = events.filter(e => e.date<today  && e.type!=='return').sort((a,b) => b.date.localeCompare(a.date))
+    const pastReturns    = events.filter(e => e.date<today  && e.type==='return' ).sort((a,b) => b.date.localeCompare(a.date))
 
-    const isAdopt=_apptTab==='adoptions'
-    const accentColor=isAdopt?'#7a5090':'#b05070'
-    const accentPale=isAdopt?'#f0eaf8':'#fdf0f3'
-    const accentBorder=isAdopt?'#c8aae0':'#e8b4c4'
-    const accentLight=isAdopt?'#e4d5f5':'#f5d5df'
+    const isAdopt      = _apptTab === 'adoptions'
+    const accentColor  = isAdopt ? '#7a5090' : '#b05070'
+    const accentBorder = isAdopt ? '#c8aae0' : '#e8b4c4'
 
-    // ── Header — matches Duties structure ──
-    const hdr=_el('div',{style:{background:accentColor,padding:'16px 18px 0',position:'sticky',
-      top:0,zIndex:20,boxShadow:`0 2px 12px ${accentColor}55`}})
-    hdr.appendChild(_el('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:14}},
-      _el('span',{style:{fontSize:26}},'🐾'),
-      _el('div',{style:{flex:1}},
-        _el('div',{style:{color:'white',fontWeight:800,fontSize:17,letterSpacing:'-0.02em',
-          fontFamily:"'Playfair Display',serif"}},'Adoptions & Returns'),
-        _el('div',{style:{color:'rgba(255,255,255,0.72)',fontSize:11,marginTop:2}},
-          new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}))
-      ),
-      _el('button',{style:{background:'rgba(255,255,255,0.22)',border:'1px solid rgba(255,255,255,0.3)',
-        color:'white',borderRadius:20,padding:'5px 12px',fontSize:11.5,fontWeight:700,
-        cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'},onclick:()=>showPrintSheet()},'🖨️ Print')
-    ))
-    // Tab toggle
-    const tabBar=_el('div',{style:{display:'flex',gap:3,borderRadius:'10px 10px 0 0',padding:'4px 4px 0',
-      background:'rgba(0,0,0,0.12)'}})
-    ;[['adoptions','🐾 Adoptions'],['returns','↩ Returns']].forEach(([key,label])=>{
-      const active=_apptTab===key
-      tabBar.appendChild(_el('button',{style:{flex:1,border:'none',
-        background:active?'var(--warm-white)':'transparent',
-        color:active?accentColor:'rgba(255,255,255,0.82)',
-        borderRadius:'8px 8px 0 0',padding:'9px 6px',cursor:'pointer',
-        fontFamily:'inherit',fontWeight:active?700:400,fontSize:12.5,transition:'all 0.15s'},
-        onclick:()=>{_apptTab=key;_expandedEvent=null;renderAdoptionsTab()}},label))
+    // ── HEADER — same markup as .duties-header ───────────────
+    const hdr = document.createElement('div')
+    hdr.className = 'duties-header'
+    hdr.style.cssText = `background:${accentColor};box-shadow:0 2px 12px ${accentColor}55`
+    hdr.innerHTML = `
+      <div class="duties-header-top">
+        <span style="font-size:26px;line-height:1">🐾</span>
+        <div>
+          <div class="duties-title">Adoptions & Returns</div>
+          <div class="duties-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+        </div>
+        <button onclick="showPrintSheet()"
+          style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+          🖨️ Print
+        </button>
+      </div>`
+
+    // Tab bar — same .d-tabs / .d-tab-btn classes ────────────
+    const tabBar = document.createElement('div')
+    tabBar.className = 'd-tabs'
+    ;[['adoptions','🐾 Adoptions'],['returns','↩ Returns']].forEach(([key,label]) => {
+      const btn = document.createElement('button')
+      btn.className = 'd-tab-btn' + (_apptTab === key ? ' active' : '')
+      btn.style.color = _apptTab === key ? accentColor : 'rgba(255,255,255,0.85)'
+      btn.textContent = label
+      btn.onclick = () => { _apptTab = key; _expandedEvent = null; renderAdoptionsTab() }
+      tabBar.appendChild(btn)
     })
     hdr.appendChild(tabBar)
     root.appendChild(hdr)
 
-    const body=_el('div',{style:{padding:'18px 16px 88px',background:'var(--cream)',minHeight:'100%'}})
+    // ── BODY — same .duties-body class ───────────────────────
+    const body = document.createElement('div')
+    body.className = 'duties-body'
+    body.style.paddingBottom = '88px'
     root.appendChild(body)
 
-    const todayList=isAdopt?todayAdoptions:todayReturns
-    const pastList=isAdopt?pastAdoptions:pastReturns
+    const todayList = isAdopt ? todayAdoptions : todayReturns
+    const pastList  = isAdopt ? pastAdoptions  : pastReturns
 
-    // ── Action buttons ────────────────────────────────
-    const btnRow=_el('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',marginBottom:16}})
-    if(isAdopt) btnRow.appendChild(_el('button',{style:{background:'var(--warm-white)',color:accentColor,
-      border:`1.5px solid ${accentBorder}`,borderRadius:10,padding:'7px 14px',fontSize:12,
-      fontWeight:600,cursor:'pointer',fontFamily:'inherit'},
-      onclick:()=>showCsvImport(body,events,renderAdoptionsTab)},'📄 Import CSV'))
-    btnRow.appendChild(_el('button',{style:{background:accentColor,color:'white',border:'none',
-      borderRadius:10,padding:'8px 18px',fontSize:12.5,fontWeight:700,cursor:'pointer',fontFamily:'inherit'},
-      onclick:()=>showEventForm(body,events,isAdopt?'adoption':'return',renderAdoptionsTab)},
-      isAdopt?'+ Add Adoption':'+ Log Return'))
+    // ── Action buttons ───────────────────────────────────────
+    const btnRow = document.createElement('div')
+    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-bottom:18px'
+    if (isAdopt) {
+      const csvBtn = document.createElement('button')
+      csvBtn.className = 'reset-btn'
+      csvBtn.style.cssText = 'padding:7px 14px;font-size:12px;font-weight:600'
+      csvBtn.textContent = '📄 Import CSV'
+      csvBtn.onclick = () => showCsvImport(body, events, renderAdoptionsTab)
+      btnRow.appendChild(csvBtn)
+    }
+    const addBtn = document.createElement('button')
+    addBtn.style.cssText = `background:${accentColor};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit`
+    addBtn.textContent = isAdopt ? '+ Add Adoption' : '+ Log Return'
+    addBtn.onclick = () => showEventForm(body, events, isAdopt ? 'adoption' : 'return', renderAdoptionsTab)
+    btnRow.appendChild(addBtn)
     body.appendChild(btnRow)
 
-    // ── Today section ─────────────────────────────────
-    body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
-      color:accentColor,display:'flex',alignItems:'center',gap:10,marginBottom:10}},
-      `Today — ${todayList.length?todayList.length+' appointment'+(todayList.length!==1?'s':''):'none scheduled'}`,
-      _el('div',{style:{flex:1,height:'1.5px',background:`linear-gradient(to right,${accentBorder},transparent)`}})
-    ))
+    // ── Today section ────────────────────────────────────────
+    const todaySL = document.createElement('div')
+    todaySL.className = 'section-label'
+    todaySL.style.color = accentColor
+    todaySL.textContent = `Today — ${todayList.length ? todayList.length + ' appointment' + (todayList.length !== 1 ? 's' : '') : 'none scheduled'}`
+    body.appendChild(todaySL)
 
-    if(!todayList.length){
-      body.appendChild(_el('div',{style:{background:'var(--warm-white)',border:'1.5px solid var(--sand-light)',
-        borderRadius:13,padding:'20px',textAlign:'center',color:'var(--light)',fontSize:13,
-        fontStyle:'italic',marginBottom:18}},
-        isAdopt?'No adoption appointments today':'No returns today'))
+    const todayBlock = document.createElement('div')
+    todayBlock.className = 'time-block'
+    const todayList2 = document.createElement('div')
+    todayList2.className = 'task-list'
+    todayList2.style.marginBottom = '20px'
+
+    if (!todayList.length) {
+      const empty = document.createElement('div')
+      empty.className = 'task-card'
+      empty.style.cssText = 'cursor:default;color:var(--light);font-style:italic;font-size:.84rem;justify-content:center'
+      empty.textContent = isAdopt ? 'No adoption appointments today' : 'No returns today'
+      todayList2.appendChild(empty)
     } else {
-      const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}})
-      todayList.forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab)))
-      body.appendChild(list)
+      todayList.forEach(ev => todayList2.appendChild(renderEventCard(ev, events, renderAdoptionsTab)))
+    }
+    todayBlock.appendChild(todayList2)
+    body.appendChild(todayBlock)
+
+    // ── Past history ─────────────────────────────────────────
+    if (pastList.length > 0) {
+      const histSL = document.createElement('div')
+      histSL.className = 'section-label'
+      histSL.textContent = `Recent History — ${pastList.length} total`
+      body.appendChild(histSL)
+      const histBlock = document.createElement('div')
+      histBlock.className = 'time-block'
+      const histList = document.createElement('div')
+      histList.className = 'task-list'
+      histList.style.marginBottom = '16px'
+      pastList.slice(0, 8).forEach(ev => histList.appendChild(renderEventCard(ev, events, renderAdoptionsTab, true)))
+      histBlock.appendChild(histList)
+      body.appendChild(histBlock)
     }
 
-    // ── Recent history ────────────────────────────────
-    if(pastList.length>0){
-      body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
-        color:'var(--mid)',display:'flex',alignItems:'center',gap:10,marginBottom:10}},
-        `Recent History — ${pastList.length} total`,
-        _el('div',{style:{flex:1,height:'1.5px',background:'linear-gradient(to right,var(--sand),transparent)'}})
-      ))
-      const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:16}})
-      pastList.slice(0,8).forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab,true)))
-      body.appendChild(list)
-    }
+    if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
 
-    // Restore scroll
-    if(scrollEl&&savedScroll>0) requestAnimationFrame(()=>{scrollEl.scrollTop=savedScroll})
-
-  }catch(err){
-    root.innerHTML=`<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
+  } catch(err) {
+    root.innerHTML = `<div style="padding:24px;color:#c97b5a;font-size:13px"><strong>Error:</strong> ${err.message}</div>`
     console.error(err)
   }
 }
 
-// _el_section replaced by inline Caveat section labels
+function renderEventCard(ev, all, rerender, compact) {
+  const isReturn   = ev.type === 'return'
+  const col        = isReturn ? '#b05070' : '#7a5090'
+  const pale       = isReturn ? '#fdf0f3' : '#f0eaf8'
+  const border     = isReturn ? '#e8b4c4' : '#c8aae0'
+  const checklist  = isReturn ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before, ...ADOPTION_CHECKLIST.during, ...ADOPTION_CHECKLIST.after]
+  const done       = ev.checklist || {}
+  const doneSteps  = checklist.filter(s => done[s.id]).length
+  const totalSteps = checklist.length
+  const isExpanded = _expandedEvent === ev.id && !compact
 
+  // ── Card — uses .task-card class ─────────────────────────
+  const card = document.createElement('div')
+  card.className = 'task-card'
+  card.style.cssText = `flex-direction:column;align-items:stretch;gap:0;padding:0;cursor:pointer;border-left:3px solid ${compact ? 'var(--sand)' : col};${compact ? 'opacity:0.75' : ''}`
 
-function renderEventCard(ev,all,rerender,compact){
-  const isReturn=ev.type==='return'
-  const col=isReturn?'#b05070':'#7a5090'
-  const pale=isReturn?'#fdf0f3':'#f5f0fa'
-  const border=isReturn?'#e8b4c4':'#c8aae0'
-  const checklist=isReturn?RETURN_CHECKLIST:[...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
-  const done=ev.checklist||{}
-  const doneSteps=checklist.filter(s=>done[s.id]).length
-  const totalSteps=checklist.length
-  const isExpanded=_expandedEvent===ev.id&&!compact
+  // Top row
+  const topRow = document.createElement('div')
+  topRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:11px 12px 10px 13px'
+  topRow.onclick = () => { if (!compact) { _expandedEvent = isExpanded ? null : ev.id; rerender() } }
 
-  const card=_el('div',{style:{background:'var(--warm-white)',border:`1.5px solid ${isExpanded?col:border}`,
-    borderRadius:13,overflow:'hidden',transition:'border-color 0.2s',position:'relative'}})
-  // left accent stripe
-  const cardStripe=_el('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:3,
-    background:compact?'var(--faint)':col,transition:'background 0.2s',zIndex:1}})
-  card.appendChild(cardStripe)
+  // Icon badge
+  const iconEl = document.createElement('div')
+  iconEl.style.cssText = `width:34px;height:34px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px`
+  iconEl.textContent = isReturn ? '↩' : '🐾'
+  topRow.appendChild(iconEl)
 
-  // Card top row
-  const topRow=_el('div',{style:{display:'flex',alignItems:'flex-start',gap:10,
-    padding:'12px 13px 12px 16px',cursor:'pointer'},
-    onclick:()=>{_expandedEvent=isExpanded?null:ev.id;rerender()}
-  },
-    _el('div',{style:{width:36,height:36,borderRadius:10,background:pale,
-      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:18}},
-      isReturn?'↩':'🐾'),
-    _el('div',{style:{flex:1,minWidth:0}},
-      _el('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}},
-        _el('span',{style:{fontWeight:800,fontSize:14}},ev.adopterName||'Adopter'),
-        ev.time&&_el('span',{style:{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:999,
-          background:pale,color:col}},ev.time),
-        ...(ev.status==='completed'?[_el('span',{style:{fontSize:10,fontWeight:700,padding:'2px 7px',
-          borderRadius:999,background:'#d4f0dc',color:'#3a8a5c'}},'✓ Done')]:[] )
-      ),
-      ev.cats&&ev.cats.length>0&&_el('div',{style:{fontSize:12,color:'#7a6e65',marginBottom:3}},
-        '🐱 '+ev.cats.join(', ')),
-      ev.notes&&_el('div',{style:{fontSize:11,color:'#b0a898',fontStyle:'italic',marginBottom:3}},ev.notes),
-      // Progress bar
-      !compact&&_el('div',{style:{display:'flex',alignItems:'center',gap:8,marginTop:4}},
-        _el('div',{style:{flex:1,height:3,background:'#f0ebe4',borderRadius:999,overflow:'hidden'}},
-          _el('div',{style:{height:'100%',borderRadius:999,background:col,transition:'width 0.3s',
-            width:`${totalSteps>0?doneSteps/totalSteps*100:0}%`}})),
-        _el('span',{style:{fontSize:10,color:col,fontWeight:700,flexShrink:0}},`${doneSteps}/${totalSteps}`)
-      )
-    ),
-    !compact&&_el('div',{style:{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end',flexShrink:0}},
-      _el('span',{style:{fontSize:14,color:'#b0a898',transform:isExpanded?'rotate(180deg)':'none',
-        transition:'transform 0.2s',display:'block',lineHeight:1}},'⌄'),
-      _el('div',{style:{display:'flex',gap:4},onclick:e=>e.stopPropagation()},
-        ...(ev.status==='scheduled'?[_el('button',{style:{background:col,color:'white',border:'none',
-          borderRadius:6,padding:'4px 9px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>_updateEvtStatus(ev.id,'completed',all,rerender)},'✓')]: []),
-        _el('button',{style:{background:'transparent',color:col,border:`1px solid ${border}`,
-          borderRadius:6,padding:'4px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>showInlineEventEdit(card,ev,all,rerender)},'✎'),
-        _el('button',{style:{background:'transparent',color:'#b0a898',border:'1px solid #e8ddd0',
-          borderRadius:6,padding:'4px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>_deleteEvt(ev.id,all,rerender)},'×')
-      )
-    )
-  )
+  // Task body
+  const taskBody = document.createElement('div')
+  taskBody.className = 'task-body'
+
+  const taskName = document.createElement('div')
+  taskName.className = 'task-name'
+  taskName.textContent = ev.adopterName || 'Adopter'
+  taskBody.appendChild(taskName)
+
+  const taskMeta = document.createElement('div')
+  taskMeta.className = 'task-meta'
+  if (ev.time) {
+    const tb = document.createElement('span')
+    tb.className = 'badge quick'
+    tb.style.cssText = `background:${pale};color:${col};border-color:${border}`
+    tb.textContent = '🕐 ' + ev.time
+    taskMeta.appendChild(tb)
+  }
+  if (ev.status === 'completed') {
+    const db = document.createElement('span'); db.className = 'badge delegate'; db.textContent = '✓ Done'; taskMeta.appendChild(db)
+  }
+  if (isReturn) {
+    const rb = document.createElement('span'); rb.className = 'badge solo'; rb.textContent = '↩ Return'; taskMeta.appendChild(rb)
+  } else {
+    const ab = document.createElement('span'); ab.className = 'badge delegate'; ab.textContent = '🐾 Adoption'; taskMeta.appendChild(ab)
+  }
+  if (ev.cats && ev.cats.length) {
+    const cb = document.createElement('span'); cb.className = 'badge tip'; cb.textContent = '🐱 ' + ev.cats.join(', '); taskMeta.appendChild(cb)
+  }
+  if (ev.notes) {
+    const nb = document.createElement('span')
+    nb.className = 'badge'
+    nb.style.cssText = 'background:var(--sand-light);color:var(--mid);border:1px solid var(--sand);font-style:italic'
+    nb.textContent = ev.notes
+    taskMeta.appendChild(nb)
+  }
+  taskBody.appendChild(taskMeta)
+
+  // Progress bar
+  if (!compact) {
+    const prog = document.createElement('div')
+    prog.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px'
+    prog.innerHTML = `
+      <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden">
+        <div style="height:100%;border-radius:999px;background:${col};width:${totalSteps > 0 ? doneSteps/totalSteps*100 : 0}%;transition:width .3s"></div>
+      </div>
+      <span style="font-size:10px;color:${col};font-weight:700;flex-shrink:0">${doneSteps}/${totalSteps}</span>`
+    taskBody.appendChild(prog)
+  }
+  topRow.appendChild(taskBody)
+
+  // Action buttons (right, non-compact only)
+  if (!compact) {
+    const acts = document.createElement('div')
+    acts.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0'
+    acts.onclick = e => e.stopPropagation()
+    acts.innerHTML = `<span style="font-size:14px;color:var(--light);transition:transform .2s;display:block;line-height:1;transform:${isExpanded ? 'rotate(180deg)' : 'none'}">⌄</span>`
+    const btnWrap = document.createElement('div')
+    btnWrap.style.cssText = 'display:flex;gap:4px'
+    if (ev.status === 'scheduled') {
+      const doneBtn = document.createElement('button')
+      doneBtn.style.cssText = `background:${col};color:white;border:none;border-radius:6px;padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit`
+      doneBtn.textContent = '✓'
+      doneBtn.onclick = () => _updateEvtStatus(ev.id, 'completed', all, rerender)
+      btnWrap.appendChild(doneBtn)
+    }
+    const editBtn = document.createElement('button')
+    editBtn.style.cssText = `background:transparent;color:${col};border:1px solid ${border};border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit`
+    editBtn.textContent = '✎'
+    editBtn.onclick = () => showInlineEventEdit(card, ev, all, rerender)
+    const delBtn = document.createElement('button')
+    delBtn.style.cssText = 'background:transparent;color:var(--light);border:1px solid var(--sand-light);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit'
+    delBtn.textContent = '×'
+    delBtn.onclick = () => _deleteEvt(ev.id, all, rerender)
+    btnWrap.appendChild(editBtn)
+    btnWrap.appendChild(delBtn)
+    acts.appendChild(btnWrap)
+    topRow.appendChild(acts)
+  }
   card.appendChild(topRow)
 
-  // Expanded checklist
-  if(isExpanded){
-    const sections=isReturn
-      ?[{label:null,items:RETURN_CHECKLIST}]
-      :[{label:'BEFORE',items:ADOPTION_CHECKLIST.before},
-        {label:'DURING — SHELTERLUV',items:ADOPTION_CHECKLIST.during},
-        {label:'AFTER',items:ADOPTION_CHECKLIST.after}]
+  // ── Expanded checklist ───────────────────────────────────
+  if (isExpanded) {
+    const sections = isReturn
+      ? [{label: null, items: RETURN_CHECKLIST}]
+      : [{label: 'BEFORE', items: ADOPTION_CHECKLIST.before},
+         {label: 'DURING — SHELTERLUV', items: ADOPTION_CHECKLIST.during},
+         {label: 'AFTER', items: ADOPTION_CHECKLIST.after}]
 
-    const clBody=_el('div',{style:{borderTop:`1px solid ${border}`,padding:'10px 12px 10px 16px',
-      background:pale,display:'flex',flexDirection:'column',gap:1}})
-    sections.forEach(({label,items})=>{
-      if(label) clBody.appendChild(_el('div',{style:{fontSize:9,fontWeight:700,color:col,
-        letterSpacing:'0.07em',padding:'8px 4px 4px',opacity:0.75}},label))
-      items.forEach(step=>{
-        const checked=!!done[step.id]
-        clBody.appendChild(_el('div',{style:{display:'flex',alignItems:'flex-start',gap:9,
-          padding:'7px 8px',borderRadius:8,cursor:'pointer',
-          background:checked?pale:'transparent'},
-          onclick:()=>{
-            const updated=[...all], idx=updated.findIndex(e=>e.id===ev.id)
-            if(idx>=0){updated[idx]={...updated[idx],checklist:{...done,[step.id]:!checked}};saveEvents(updated);rerender()}
-          }},
-          _el('div',{style:{width:17,height:17,borderRadius:4,flexShrink:0,marginTop:1,
-            background:checked?col:'white',border:`1.5px solid ${checked?col:'#e8ddd0'}`,
-            display:'flex',alignItems:'center',justifyContent:'center'}},
-            checked?_el('span',{style:{fontSize:9,color:'white',fontWeight:900,lineHeight:1}},'✓'):null),
-          _el('span',{style:{fontSize:12,lineHeight:1.4,color:checked?col:'#3a3530',
-            textDecoration:checked?'line-through':'none',opacity:checked?0.65:1}},step.label)
-        ))
+    const clBody = document.createElement('div')
+    clBody.style.cssText = `border-top:1px solid ${border};padding:8px 10px 10px 12px;background:${pale};display:flex;flex-direction:column;gap:3px`
+
+    sections.forEach(({label, items}) => {
+      if (label) {
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `font-size:9px;font-weight:700;color:${col};letter-spacing:.07em;padding:6px 4px 2px;opacity:.8`
+        lbl.textContent = label
+        clBody.appendChild(lbl)
+      }
+      items.forEach(step => {
+        const checked = !!done[step.id]
+        const row = document.createElement('div')
+        row.className = 'task-card'
+        row.style.cssText = `background:${checked ? pale : 'var(--warm-white)'};border:1px solid ${checked ? col : 'var(--sand-light)'};border-left:3px solid ${checked ? col : 'var(--faint)'};padding:7px 10px;cursor:pointer;margin-bottom:0`
+        row.onclick = () => {
+          const updated = [...all], idx = updated.findIndex(e => e.id === ev.id)
+          if (idx >= 0) { updated[idx] = {...updated[idx], checklist: {...done, [step.id]: !checked}}; saveEvents(updated); rerender() }
+        }
+        const cb = document.createElement('div')
+        cb.className = 'task-checkbox'
+        cb.style.cssText = `background:${checked ? col : 'white'};border-color:${checked ? col : 'var(--sand)'}`
+        if (checked) cb.innerHTML = '<svg width="11" height="9" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        const lbl = document.createElement('div')
+        lbl.className = 'task-body'
+        lbl.innerHTML = `<div class="task-name" style="font-size:.82rem;${checked ? 'text-decoration:line-through;color:var(--mid);opacity:.7' : ''}">${step.label}</div>`
+        row.appendChild(cb)
+        row.appendChild(lbl)
+        clBody.appendChild(row)
       })
     })
     card.appendChild(clBody)
   }
   return card
 }
-
 function _updateEvtStatus(id,status,all,rerender){
   saveEvents(all.map(a=>a.id===id?{...a,status}:a));rerender()
 }
