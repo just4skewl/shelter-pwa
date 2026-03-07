@@ -711,6 +711,19 @@ const FIREBASE_CONFIG = {
   appId: "1:1058350899127:web:c2e161707d402b44961232"
 }
 
+// ── AI Proxy ──────────────────────────────────────────────────────────────────
+// Keeps your API key server-side and fixes CORS for GitHub Pages
+// Update PROXY_URL after deploying shelter-proxy to Render
+const PROXY_URL = 'https://shelter-proxy.onrender.com'
+function _claudeAPI(body) {
+  return fetch(PROXY_URL + '/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(r => r.json())
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 let _db = null
 let _fbReady = false
 let _fbConnected = false
@@ -829,7 +842,11 @@ function _showSyncBadge(state) {
   badge.title = s.title
   badge.style.opacity = '1'
 }
-function todayDateStr() { return new Date().toISOString().split('T')[0] }
+function todayDateStr() {
+  // Use local date, not UTC — toISOString() gives wrong date in EST after 7pm
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+}
 function _uid() { return Math.random().toString(36).slice(2, 9) }
 
 const ADOPTION_CHECKLIST = {
@@ -1199,6 +1216,8 @@ function renderAdoptionsTab(){
     const today=todayDateStr()
     const todayAdoptions=events.filter(e=>e.date===today&&e.type!=='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
     const todayReturns=events.filter(e=>e.date===today&&e.type==='return').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const upcomingAdoptions=events.filter(e=>e.date>today&&e.type!=='return').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
+    const upcomingReturns=events.filter(e=>e.date>today&&e.type==='return').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
     const pastAdoptions=events.filter(e=>e.date<today&&e.type!=='return').sort((a,b)=>b.date.localeCompare(a.date))
     const pastReturns=events.filter(e=>e.date<today&&e.type==='return').sort((a,b)=>b.date.localeCompare(a.date))
 
@@ -1242,6 +1261,7 @@ function renderAdoptionsTab(){
     root.appendChild(body)
 
     const todayList=isAdopt?todayAdoptions:todayReturns
+    const upcomingList=isAdopt?upcomingAdoptions:upcomingReturns
     const pastList=isAdopt?pastAdoptions:pastReturns
 
     // ── Action buttons ────────────────────────────────
@@ -1272,6 +1292,37 @@ function renderAdoptionsTab(){
       const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}})
       todayList.forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab)))
       body.appendChild(list)
+    }
+
+    // ── Upcoming section ─────────────────────────────
+    if(upcomingList.length>0){
+      // Group by date
+      const byDate={}
+      upcomingList.forEach(ev=>{
+        if(!byDate[ev.date]) byDate[ev.date]=[]
+        byDate[ev.date].push(ev)
+      })
+      const dateLabel=d=>{
+        const dt=new Date(d+'T12:00:00')
+        const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1)
+        const isTmr=dt.toDateString()===tomorrow.toDateString()
+        return (isTmr?'Tomorrow — ':'')
+          +dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
+          +' — '+byDate[d].length+' appt'+(byDate[d].length!==1?'s':'')
+      }
+      body.appendChild(_el('div',{style:{fontFamily:"'Caveat',cursive",fontSize:'1.3rem',
+        color:accentColor,display:'flex',alignItems:'center',gap:10,marginBottom:10,marginTop:4}},
+        `Upcoming — ${upcomingList.length} appointment${upcomingList.length!==1?'s':''}`,
+        _el('div',{style:{flex:1,height:'1.5px',background:`linear-gradient(to right,${accentBorder},transparent)`}})
+      ))
+      Object.keys(byDate).forEach(date=>{
+        body.appendChild(_el('div',{style:{fontSize:11,fontWeight:700,letterSpacing:'.05em',
+          textTransform:'uppercase',color:accentColor,padding:'6px 2px 4px',opacity:.7}},
+          dateLabel(date)))
+        const list=_el('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}})
+        byDate[date].forEach(ev=>list.appendChild(renderEventCard(ev,events,renderAdoptionsTab)))
+        body.appendChild(list)
+      })
     }
 
     // ── Recent history ────────────────────────────────
@@ -1945,11 +1996,10 @@ function showScanSheet(){
     statusDiv.textContent='📤 Analyzing...';statusDiv.style.background='#fdf7e8';statusDiv.style.color='#c98a2a'
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+      const resp=await _claudeAPI({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
           {type:'text',text:'This is a printed shelter task checklist. Look at every checkbox. Return ONLY valid JSON: { "type": "tasks"|"meds"|"adoptions"|"unknown", "checkedItems": ["exact text of each checked item"], "summary": "one sentence" }. No explanation outside JSON.'}
-        ]}]})})
+        ]}]})
       const data=await resp.json()
       const raw=data.content?.find(b=>b.type==='text')?.text||'{}'
       const result=JSON.parse(raw.replace(/```json|```/g,'').trim())
@@ -2362,10 +2412,7 @@ function showMedScan() {
     var reader = new FileReader()
     reader.onload = function() {
       var b64 = reader.result.split(',')[1]
-      fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
+      _claudeAPI({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
           messages: [{role:'user', content:[
@@ -2373,7 +2420,6 @@ function showMedScan() {
             {type:'text', text:'This is a cat shelter med whiteboard or med sheet. Extract all cat names, medications, doses, units, times (AM/PM), and any dates or notes visible. Return ONLY valid JSON, no explanation:\n{"cats":[{"name":"CatName","room":"Room X","notes":"any notes","meds":[{"name":"MedName","dose":"50","unit":"mg","times":["AM"],"notes":"with food","startDate":"","endDate":""}]}]}\nIf a field is not visible, use empty string. times must be array of "AM" and/or "PM". Do not include markdown.'}
           ]}]
         })
-      })
       .then(function(r) { return r.json() })
       .then(function(data) {
         var raw = (data.content || []).find(function(b) { return b.type === 'text' }) || {}
