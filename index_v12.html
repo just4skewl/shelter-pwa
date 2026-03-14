@@ -952,6 +952,7 @@ body {
     <span class="nav-icon">🐾</span>
     <span class="nav-label">ADOPTIONS</span>
   </button>
+  <div style="position:absolute;bottom:2px;right:8px;font-size:8px;color:rgba(255,255,255,0.25);letter-spacing:.03em;pointer-events:none">v70</div>
 </nav>
 
 
@@ -1284,6 +1285,20 @@ function _sheetsJsonToCsv(json) {
   ).join('\n')
 }
 
+// ── Event type classifier ─────────────────────────────────────────
+// Returns true if a name/note string looks like a day-level note
+// rather than an actual adopter appointment
+function _isLikelyNote(name, arrivedNote, staffNote) {
+  const all = [name, arrivedNote, staffNote].join(' ').toLowerCase()
+  // Explicit day-level keywords
+  if (/\b(intake|transport|vet\s|closed|staff|volunteer|meeting|holiday|training|surgery|foster|transfer|no\s*appts?|lobby|coverage|out\s*of\s*office|day\s*off|inspect|audit|event)\b/.test(all)) return true
+  // All-caps name with no lowercase letters is likely a label, not a person
+  if (/^[A-Z][A-Z\s\-\/&]+$/.test(name.trim()) && name.trim().length > 4) return true
+  // Contains a dash + single word (e.g. "Amanda - coverage", "Monica - AM only")
+  if (/^[A-Z][a-z]+ [-–] [a-z]/i.test(name.trim())) return true
+  return false
+}
+
 // Auto-import CSV text — merges new events without showing UI
 function _gsAutoImport(csvText) {
   try {
@@ -1326,6 +1341,7 @@ function _gsAutoImport(csvText) {
         const noteParts = [arrivedNote, staffNote].filter(Boolean)
         let type = 'adoption'
         if (/return|reclaim|surrender/i.test(arrivedNote) || /return|reclaim|surrender/i.test(name)) type = 'return'
+        else if (_isLikelyNote(name, arrivedNote, staffNote)) type = 'note'
         built.push({
           id: _uid(), type,
           adopterName: name, date: r._date,
@@ -1746,12 +1762,29 @@ function renderToday() {
     }
 
     // ── Today's Appointments ──────────────────────────────────
+    const todayAppts = todayEvs.filter(e => e.type !== 'note')
+    const todayNotes = todayEvs.filter(e => e.type === 'note')
+
+    // Day notes strip (if any)
+    if (todayNotes.length) {
+      const notesStrip = document.createElement('div')
+      notesStrip.style.cssText = 'background:#fdf6e0;border:1.5px solid #e8d898;border-radius:10px;padding:8px 12px;margin-bottom:10px;'
+      notesStrip.innerHTML = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a6020;margin-bottom:5px;">📋 Day notes</div>` +
+        todayNotes.map(n =>
+          `<div style="font-size:12px;color:#5a4820;padding:2px 0;border-bottom:1px solid #f0e0a8;last:border:none">
+            ${n.time ? `<span style="font-weight:600;margin-right:6px">${n.time}</span>` : ''}
+            ${n.adopterName}${n.notes ? ` <span style="color:#8a7040;font-style:italic">· ${n.notes}</span>` : ''}
+          </div>`
+        ).join('')
+      body.appendChild(notesStrip)
+    }
+
     const sl3 = document.createElement('div')
     sl3.className = 'section-label purple'
-    sl3.innerHTML = `🐾 Today's Appointments${todayEvs.length?' ('+todayEvs.length+')':''} <button onclick="switchSection('adoptions')" style="margin-left:auto;font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.78rem;font-weight:700;cursor:pointer;flex-shrink:0">Manage →</button>`
+    sl3.innerHTML = `🐾 Today's Appointments${todayAppts.length?' ('+todayAppts.length+')':''} <button onclick="switchSection('adoptions')" style="margin-left:auto;font-family:inherit;background:transparent;border:none;color:#7a5090;font-size:.78rem;font-weight:700;cursor:pointer;flex-shrink:0">Manage →</button>`
     body.appendChild(sl3)
 
-    if (!todayEvs.length) {
+    if (!todayAppts.length) {
       const empty = document.createElement('div')
       empty.className = 'task-card'
       empty.style.marginBottom = '20px'
@@ -1760,7 +1793,7 @@ function renderToday() {
     } else {
       const apptWrap = document.createElement('div')
       apptWrap.className = 'task-card-list stripe-purple'
-      todayEvs.forEach(ev => {
+      todayAppts.forEach(ev => {
         const isRet  = ev.type === 'return'
         const isMove = ev.type === 'move'
         const col    = isRet ? '#b05070' : isMove ? '#7a6030' : '#7a5090'
@@ -1797,7 +1830,7 @@ function renderToday() {
     sl4.className = 'section-label amber'
     sl4.textContent = '🗓️ Smart Day Plan'
     body.appendChild(sl4)
-    renderSmartSchedule(body, todayEvs)
+    renderSmartSchedule(body, todayAppts)
 
     // ── Staff notes section ───────────────────────────────────
     const sl5 = document.createElement('div')
@@ -2157,6 +2190,22 @@ function renderAdoptionsTab(){
     body.appendChild(btnRow)
 
     // ── Today section ─────────────────────────────────────────
+    // Show any day notes at the top as context (not as appointment cards)
+    const todayNotesInTab = events.filter(e => e.date === today && e.type === 'note')
+    if (todayNotesInTab.length && isAdopt) {
+      const notesStrip = document.createElement('div')
+      notesStrip.style.cssText = 'background:#fdf6e0;border:1.5px solid #e8d898;border-radius:10px;padding:8px 12px;margin-bottom:14px;'
+      notesStrip.innerHTML = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a6020;margin-bottom:5px;">📋 Day notes (not appointments)</div>` +
+        todayNotesInTab.map(n =>
+          `<div style="font-size:12px;color:#5a4820;padding:3px 0;display:flex;align-items:flex-start;gap:6px;border-bottom:1px solid #f0e0a8">
+            ${n.time ? `<span style="font-weight:600;flex-shrink:0">${n.time}</span>` : ''}
+            <span>${n.adopterName}${n.notes ? ` <span style="color:#8a7040;font-style:italic">· ${n.notes}</span>` : ''}</span>
+            <button onclick="event.stopPropagation();(()=>{const evts=loadEvents().map(x=>x.id==='${n.id}'?{...x,type:'adoption'}:x);saveEvents(evts);renderAdoptionsTab()})()" style="margin-left:auto;background:none;border:1px solid #d0c090;border-radius:5px;padding:1px 7px;font-size:10px;color:#7a6020;cursor:pointer;font-family:inherit;flex-shrink:0">→ Adoption</button>
+          </div>`
+        ).join('')
+      body.appendChild(notesStrip)
+    }
+
     const sl1 = document.createElement('div')
     sl1.className = `section-label ${isAdopt?'purple':'rose'}`
     sl1.textContent = `Today — ${todayList.length ? todayList.length+' appointment'+(todayList.length!==1?'s':'') : 'none scheduled'}`
@@ -2227,11 +2276,12 @@ function renderAdoptionsTab(){
 function renderEventCard(ev, all, rerender, compact) {
   const isRet  = ev.type === 'return'
   const isMove = ev.type === 'move'
-  const col    = isRet ? '#b05070' : isMove ? '#7a6030' : '#7a5090'
-  const pale   = isRet ? '#fdf0f3' : isMove ? '#fdf6e0' : '#f5f0fa'
-  const border = isRet ? '#e8b4c4' : isMove ? '#e0cc88' : '#c8aae0'
-  const stripeClass = isRet ? 'stripe-rose' : isMove ? 'stripe-move' : 'stripe-purple'
-  const checklist = isRet ? RETURN_CHECKLIST : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
+  const isNote = ev.type === 'note'
+  const col    = isRet ? '#b05070' : isMove ? '#7a6030' : isNote ? '#7a6020' : '#7a5090'
+  const pale   = isRet ? '#fdf0f3' : isMove ? '#fdf6e0' : isNote ? '#fdf6e0' : '#f5f0fa'
+  const border = isRet ? '#e8b4c4' : isMove ? '#e0cc88' : isNote ? '#e8d898' : '#c8aae0'
+  const stripeClass = isRet ? 'stripe-rose' : isMove ? 'stripe-move' : isNote ? 'stripe-move' : 'stripe-purple'
+  const checklist = isRet ? RETURN_CHECKLIST : isNote ? [] : [...ADOPTION_CHECKLIST.before,...ADOPTION_CHECKLIST.during,...ADOPTION_CHECKLIST.after]
   const done      = ev.checklist || {}
   const doneSteps = checklist.filter(s => done[s.id]).length
   const isExpanded = _expandedEvent === ev.id && !compact
@@ -2263,7 +2313,7 @@ function renderEventCard(ev, all, rerender, compact) {
   topRow.onclick = () => { _expandedEvent = isExpanded ? null : ev.id; rerender() }
 
   topRow.innerHTML = `
-    <div style="width:36px;height:36px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">${isRet?'↩':isMove?'🔄':'🐾'}</div>
+    <div style="width:36px;height:36px;border-radius:10px;background:${pale};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">${isRet?'↩':isMove?'🔄':isNote?'📋':'🐾'}</div>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
         <span class="task-name" style="font-weight:800;font-size:14px">${ev.adopterName||'Adopter'}</span>
@@ -2272,13 +2322,13 @@ function renderEventCard(ev, all, rerender, compact) {
       </div>
       ${ev.cats&&ev.cats.length?`<div style="font-size:12px;color:var(--mid);margin-bottom:3px">🐱 ${ev.cats.join(', ')}</div>`:''}
       ${ev.notes?`<div style="font-size:11.5px;color:var(--mid);font-style:italic;margin-bottom:3px;line-height:1.45;white-space:normal">${ev.notes}</div>`:''}
-      ${!compact?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      ${!compact&&!isNote?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
         <div style="flex:1;height:3px;background:var(--faint);border-radius:999px;overflow:hidden"><div style="height:100%;border-radius:999px;background:${col};width:${checklist.length>0?doneSteps/checklist.length*100:0}%"></div></div>
         <span style="font-size:10px;color:${col};font-weight:700">${doneSteps}/${checklist.length}</span>
       </div>`:''}
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
-      <span class="badge ${isRet?'solo':isMove?'tip':'delegate'}">${isRet?'↩ Return':isMove?'🔄 Move':'🐾 Adoption'}</span>
+      <span class="badge ${isRet?'solo':isMove?'tip':isNote?'tip':'delegate'}">${isRet?'↩ Return':isMove?'🔄 Move':isNote?'📋 Day Note':'🐾 Adoption'}</span>
       <span style="font-size:18px;color:var(--faint);transition:transform .2s;${isExpanded?'transform:rotate(90deg)':''}">›</span>
     </div>`
   inner.appendChild(topRow)
@@ -2314,8 +2364,8 @@ function renderEventCard(ev, all, rerender, compact) {
     delBtn.style.cssText = 'cursor:pointer;border:none;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap'
     delBtn.textContent = '🗑 Remove'
     delBtn.onclick = e => { e.stopPropagation(); if(confirm(`Remove ${ev.adopterName}?`)){const evts=loadEvents().filter(x=>x.id!==ev.id);saveEvents(evts);rerender()} }
-    // No-show button (adoptions only — makes no sense for returns/moves)
-    if (!isRet && !isMove) {
+    // No-show button (adoptions only — makes no sense for returns/moves/notes)
+    if (!isRet && !isMove && !isNote) {
       const noshowBtn = document.createElement('button')
       noshowBtn.className = 'badge'
       noshowBtn.style.cssText = 'cursor:pointer;border:1.5px solid #f0c090;font-family:inherit;padding:5px 12px;font-size:12px;white-space:nowrap;background:#fff8f0;color:#c06020;'
@@ -2330,8 +2380,26 @@ function renderEventCard(ev, all, rerender, compact) {
     }
     exp.appendChild(actRow)
 
+    // ── Reclassify button — lets you fix misclassified events ──
+    const reclassRow = document.createElement('div')
+    reclassRow.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;'
+    const typeLabels = {adoption:'🐾 Adoption', return:'↩ Return', note:'📋 Day Note'}
+    ;['adoption','return','note'].filter(t => t !== ev.type).forEach(newType => {
+      const btn = document.createElement('button')
+      btn.className = 'badge'
+      btn.style.cssText = 'cursor:pointer;border:1.5px solid #d0c4b4;font-family:inherit;padding:4px 10px;font-size:11px;background:#fdfaf6;color:var(--mid);white-space:nowrap;'
+      btn.textContent = `Move to ${typeLabels[newType]}`
+      btn.onclick = e => {
+        e.stopPropagation()
+        const evts = loadEvents().map(x => x.id === ev.id ? {...x, type: newType} : x)
+        saveEvents(evts); rerender()
+      }
+      reclassRow.appendChild(btn)
+    })
+    exp.appendChild(reclassRow)
+
     // ── Find a Match button (adoptions only) ──────────────
-    if (!isRet && !isMove) {
+    if (!isRet && !isMove && !isNote) {
       const matchBtn = document.createElement('button')
       matchBtn.style.cssText = 'width:100%;margin-bottom:12px;padding:10px;background:#7a5090;color:#fff;border:none;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.02em;'
       matchBtn.innerHTML = '🐾 Find a Match'
@@ -2339,7 +2407,8 @@ function renderEventCard(ev, all, rerender, compact) {
       exp.insertBefore(matchBtn, exp.firstChild)
     }
 
-    // Checklist sections
+    // Checklist sections (skip for notes — they have no checklist)
+    if (!isNote) {
     const sections = isRet
       ? [['', RETURN_CHECKLIST]]
       : [['Before', ADOPTION_CHECKLIST.before],['During', ADOPTION_CHECKLIST.during],['After', ADOPTION_CHECKLIST.after]]
@@ -2375,6 +2444,7 @@ function renderEventCard(ev, all, rerender, compact) {
         exp.appendChild(row)
       })
     })
+    } // end if (!isNote)
     inner.appendChild(exp)
   }
   return card
@@ -2686,6 +2756,7 @@ function showCsvImport(container, events, rerender) {
         const noteParts=[arrivedNote,staffNote].filter(Boolean)
         let type='adoption'
         if(/return|reclaim|surrender/i.test(arrivedNote)||/return|reclaim|surrender/i.test(name)) type='return'
+        else if(_isLikelyNote(name, arrivedNote, staffNote)) type='note'
         built.push({
           id:_uid(), type,
           adopterName:name,
