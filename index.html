@@ -2278,22 +2278,36 @@ function renderCatRosterTab(body, accentColor) {
   dropZone.addEventListener('drop', e => {
     e.preventDefault()
     dropZone.style.borderColor = 'var(--sand-dark)'; dropZone.style.background = 'var(--warm-white)'
-    mProcessPDFs([...e.dataTransfer.files], statusEl, () => {
-      // Re-render the roster grid after import
+    statusEl.style.display = 'block'
+    statusEl.style.color = 'var(--amber)'
+    statusEl.textContent = 'Reading PDFs…'
+    mProcessPDFs([...e.dataTransfer.files], statusEl, (imported) => {
       const grid = body.querySelector('.roster-cat-grid')
       if (grid) grid.remove()
       const emptyMsg = body.querySelector('.roster-empty')
       if (emptyMsg) emptyMsg.remove()
       renderRosterGrid(body, accentColor, COLORS, AGE_LBL, PERS_LBL)
+      // Update count in header
+      const countEl = body.querySelector('[data-roster-count]')
+      if (countEl) countEl.textContent = `${mCats.length} cat${mCats.length!==1?'s':''} at JCAC`
+      statusEl.style.color = 'var(--sage)'
+      statusEl.textContent = `✓ Imported ${imported} cat${imported!==1?'s':''} — tap any card to review`
     })
   })
   fileInput.addEventListener('change', e => {
-    mProcessPDFs([...e.target.files], statusEl, () => {
+    statusEl.style.display = 'block'
+    statusEl.style.color = 'var(--amber)'
+    statusEl.textContent = 'Reading PDFs…'
+    mProcessPDFs([...e.target.files], statusEl, (imported) => {
       const grid = body.querySelector('.roster-cat-grid')
       if (grid) grid.remove()
       const emptyMsg = body.querySelector('.roster-empty')
       if (emptyMsg) emptyMsg.remove()
       renderRosterGrid(body, accentColor, COLORS, AGE_LBL, PERS_LBL)
+      const countEl = body.querySelector('[data-roster-count]')
+      if (countEl) countEl.textContent = `${mCats.length} cat${mCats.length!==1?'s':''} at JCAC`
+      statusEl.style.color = 'var(--sage)'
+      statusEl.textContent = `✓ Imported ${imported} cat${imported!==1?'s':''} — tap any card to review`
     })
     e.target.value = ''
   })
@@ -2306,7 +2320,7 @@ function renderCatRosterTab(body, accentColor) {
   // ── Header row ───────────────────────────────────────────────
   const header = _el('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}})
   const cats = JSON.parse(localStorage.getItem('jcac_elim_v2') || '[]')
-  const title = _el('div',{style:{fontSize:13,fontWeight:700,color:'var(--mid)'}},`${cats.length} cat${cats.length!==1?'s':''} at JCAC`)
+  const title = _el('div',{style:{fontSize:13,fontWeight:700,color:'var(--mid)'},'data-roster-count':''},`${cats.length} cat${cats.length!==1?'s':''} at JCAC`)
   const addBtn = _el('button',{style:{background:accentColor,color:'white',border:'none',borderRadius:9,padding:'7px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}},
     '+ Add manually')
   addBtn.onclick = () => mOpenCatEditor(null)
@@ -6338,7 +6352,7 @@ if ('serviceWorker' in navigator) {
 //  ADOPTION MATCHER — all functions prefixed with m
 // ══════════════════════════════════════════════════════════════
 const M_COLORS = ['#c97b5a','#6a9170','#7a5090','#c98a2a','#4a7aaa','#8a6aaa','#5a9a70','#c06060','#60a0a0','#a09050']
-let mCats = []       // [{id, name, extracted:{}, overrides:{}}]
+let mCats = (()=>{ try { return JSON.parse(localStorage.getItem('jcac_elim_v2')||'[]') } catch { return [] } })()  // persisted roster
 let mEditingCatId = null
 let mActiveApptId = null
 let mExtractedProfile = null
@@ -6492,6 +6506,7 @@ async function mProcessPDFs(files, statusEl, onDone) {
   if (status) { status.style.display = 'block'; status.textContent = `Processing ${pdfs.length} PDF${pdfs.length>1?'s':''}…` }
 
   let imported = 0
+  let skipped = 0
   for (const file of pdfs) {
     try {
       const base64 = await mFileToBase64(file)
@@ -6538,25 +6553,39 @@ async function mProcessPDFs(files, statusEl, onDone) {
       const jm = raw.replace(/```json|```/g,'').match(/\{[\s\S]*\}/)
       if (jm) {
         const extracted = JSON.parse(jm[0])
-        const cat = {
-          id: Date.now().toString() + Math.random(),
-          name: extracted.name || file.name.replace('.pdf',''),
-          extracted,
-          overrides: {}
+        const catName = (extracted.name || file.name.replace('.pdf','')).trim()
+        // Skip if a cat with the same name already exists (case-insensitive)
+        const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
+        if (alreadyExists) {
+          skipped++
+        } else {
+          mCats.push({
+            id: Date.now().toString() + Math.random(),
+            name: catName,
+            extracted,
+            overrides: {}
+          })
+          imported++
         }
-        mCats.push(cat)
-        imported++
       }
     } catch(e) {
-      // Create a blank entry so Michi can fill manually
-      mCats.push({ id: Date.now().toString() + Math.random(), name: file.name.replace('.pdf',''), extracted:{}, overrides:{} })
-      imported++
+      const fallbackName = file.name.replace('.pdf','').trim()
+      const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === fallbackName.toLowerCase())
+      if (!alreadyExists) {
+        mCats.push({ id: Date.now().toString() + Math.random(), name: fallbackName, extracted:{}, overrides:{} })
+        imported++
+      } else {
+        skipped++
+      }
     }
   }
   mRenderRoster()
   if (status) {
-    status.textContent = `✓ Imported ${imported} cat${imported!==1?'s':''}`
-    setTimeout(() => { status.style.display = 'none' }, 3000)
+    const msg = skipped > 0
+      ? `✓ Added ${imported} cat${imported!==1?'s':''} · ${skipped} already on roster (skipped)`
+      : `✓ Imported ${imported} cat${imported!==1?'s':''}`
+    status.textContent = msg
+    setTimeout(() => { status.style.display = 'none' }, 4000)
   }
   if (onDone) onDone(imported)
 }
@@ -6572,10 +6601,14 @@ function mFileToBase64(file) {
 
 // ── Roster render ─────────────────────────────────────────────
 function mRenderRoster() {
+  // Always persist mCats to localStorage so the Cat Roster tab can read them
+  try { localStorage.setItem('jcac_elim_v2', JSON.stringify(mCats)) } catch(e) {}
+
   const grid = document.getElementById('mCatGrid')
+  if (!grid) return  // matcher overlay may not be open
   grid.innerHTML = ''
   const count = document.getElementById('mRosterCount')
-  count.textContent = mCats.length ? `(${mCats.length} cats)` : ''
+  if (count) count.textContent = mCats.length ? `(${mCats.length} cats)` : ''
 
   mCats.forEach((cat, i) => {
     const d = {...(cat.extracted||{}), ...(cat.overrides||{})}
