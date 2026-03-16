@@ -167,7 +167,7 @@ body {
   border-radius: 14px; padding: 16px 18px; margin-bottom: 20px;
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
 }
-.progress-label { font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--ink); flex-shrink: 0; }
+.progress-label { font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--ink); flex-shrink: 0; }
 .progress-bar-wrap { flex: 1; min-width: 120px; height: 8px; background: var(--faint); border-radius: 999px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(to right, var(--sage), var(--sage-med)); border-radius: 999px; transition: width 0.5s ease; }
 .progress-count { font-size: 13px; color: var(--mid); font-weight: 600; flex-shrink: 0; }
@@ -248,8 +248,16 @@ body {
 
 /* Section labels */
 .section-label {
-  font-family: 'Caveat', cursive; font-size: 1.45rem; color: var(--terra);
-  margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--terra);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .section-label::after {
   content: ''; flex: 1; height: 1.5px;
@@ -283,7 +291,7 @@ body {
 .del-box { border-radius: 14px; padding: 16px 18px; border: 1.5px solid; }
 .del-box.volunteer { background: #edf6f0; border-color: #a8d9be; }
 .del-box.solo      { background: #fdf1ed; border-color: #f0c0a8; }
-.del-box h3 { font-family: 'Playfair Display', serif; font-size: 1rem; margin-bottom: 12px; }
+.del-box h3 { font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.92rem; font-weight: 700; margin-bottom: 12px; }
 .del-box.volunteer h3 { color: #2e7a50; }
 .del-box.solo h3      { color: #b55533; }
 .del-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
@@ -316,7 +324,7 @@ body {
   display: flex; align-items: flex-start; gap: 14px;
 }
 .no-help-banner .icon { font-size: 1.8rem; flex-shrink: 0; }
-.no-help-banner h3 { font-family: 'Playfair Display', serif; font-size: 1rem; color: var(--ink); margin-bottom: 4px; }
+.no-help-banner h3 { font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.92rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
 .no-help-banner p  { font-size: 0.8rem; color: var(--mid); line-height: 1.6; }
 
 /* Intake banner */
@@ -916,8 +924,8 @@ body {
     </div>
   </div><!-- /dtab-nohelp -->
 
-  <div style="text-align:center;padding:32px 0 8px;font-family:'Caveat',cursive;font-size:1.1rem;color:var(--sand-dark);">
-    made with <span style="color:var(--terra)">♥</span> for Michi & the cats 🐾
+  <div style="text-align:center;padding:32px 0 8px;font-family:'DM Sans',system-ui,sans-serif;font-size:11px;color:var(--sand-dark);letter-spacing:.04em;">
+    made with <span style="color:var(--terra)">♥</span> for Michi &amp; the cats 🐾
   </div>
 
   </div><!-- /duties-body -->
@@ -1666,7 +1674,7 @@ function renderToday() {
     const greeting = hour < 12 ? 'Good morning ☀️' : hour < 17 ? 'Good afternoon 🌿' : 'Good evening 🌙'
     const dateStr  = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'})
 
-    // ── Header — exact .duties-header class ──────────────────
+    // ── Header — matches Duties/Meds exactly ─────────────────
     const hdr = document.createElement('div')
     hdr.className = 'duties-header'
     hdr.style.background = '#3a3530'
@@ -1675,12 +1683,10 @@ function renderToday() {
       <div class="duties-header-top">
         <span style="font-size:26px;line-height:1">🏠</span>
         <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="duties-title">${greeting}</div>
-            <div id="sync-badge" title="Checking sync…" style="width:8px;height:8px;border-radius:50%;background:#b0a898;flex-shrink:0;margin-top:2px;transition:background 0.4s;opacity:.85;cursor:help"></div>
-          </div>
+          <div class="duties-title">${greeting}</div>
           <div class="duties-sub">${dateStr}</div>
         </div>
+        <div id="sync-badge" title="Checking sync…" style="width:8px;height:8px;border-radius:50%;background:#b0a898;flex-shrink:0;margin-top:2px;transition:background 0.4s;opacity:.85;cursor:help"></div>
         <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 11px;font-size:15px;cursor:pointer;font-family:inherit;flex-shrink:0">🖨️</button>
       </div>`
     root.appendChild(hdr)
@@ -1707,17 +1713,13 @@ function renderToday() {
     const taskPct = tasks.total > 0 ? Math.round(tasks.done / tasks.total * 100) : 0
     const medPct  = meds.total  > 0 ? Math.round(meds.doneCount / meds.total * 100) : 0
 
-    const sl1 = document.createElement('div')
-    sl1.className = 'section-label'
-    sl1.textContent = '📊 Today at a Glance'
-    body.appendChild(sl1)
-
     const statGrid = document.createElement('div')
     statGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px'
 
     const mkStat = (icon, label, pct, sub, fillColor, section) => {
       const c = document.createElement('div')
-      c.className = 'task-card card-stat stripe-terra'
+      c.className = 'task-card card-stat'
+      c.style.cssText = 'border-left:4px solid ' + fillColor + ';cursor:pointer;'
       c.onclick = () => switchSection(section)
       c.innerHTML = `<div class="task-body" style="padding-left:8px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
@@ -1733,9 +1735,9 @@ function renderToday() {
       return c
     }
     statGrid.appendChild(mkStat('📋','Tasks', taskPct,
-      taskPct===100?'All done! ✅':`${tasks.done} of ${tasks.total} done`, 'var(--terra)', 'duties'))
+      taskPct===100?'All done ✅':`${tasks.done} of ${tasks.total} done`, 'var(--terra)', 'duties'))
     statGrid.appendChild(mkStat('💊','Meds', medPct,
-      meds.total===0?'None today':medPct===100?'All given! ✅':`${meds.doneCount} of ${meds.total} given`, 'var(--sage)', 'meds'))
+      meds.total===0?'None today':medPct===100?'All given ✅':`${meds.doneCount} of ${meds.total} given`, 'var(--sage)', 'meds'))
     body.appendChild(statGrid)
 
     // ── Meds due ──────────────────────────────────────────────
@@ -2107,6 +2109,63 @@ function _drawSchedule(wrap, schedule) {
 
 
 // ═══════════════════════════════════════════════════
+// CAT ROSTER TAB — view and edit cats anytime
+// ═══════════════════════════════════════════════════
+function renderCatRosterTab(body, accentColor) {
+  const COLORS = ['#c97b5a','#6a9170','#7a5090','#c98a2a','#4a7aaa','#8a6aaa','#5a9a70','#c06060','#60a0a0','#a09050']
+  const AGE_LBL = {kitten:'Kitten',young_adult:'Young adult',adult:'Adult',senior:'Senior'}
+  const PERS_LBL = {very_shy:'Very shy',warms_up_slow:'Warms up slowly',affectionate:'Affectionate',velcro:'Velcro cat',independent:'Independent',on_own_terms:'On own terms',no_pick_up:"No pick up",bonds_one_person:'Bonds with one',playful:'Playful',chatty:'Chatty'}
+
+  let cats = JSON.parse(localStorage.getItem('jcac_elim_v2') || '[]')
+
+  const header = _el('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}})
+  const title = _el('div',{style:{fontSize:13,fontWeight:700,color:'var(--mid)'}},`${cats.length} cat${cats.length!==1?'s':''} at JCAC`)
+  const addBtn = _el('button',{style:{background:accentColor,color:'white',border:'none',borderRadius:9,padding:'7px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}},
+    '+ Add cat')
+  addBtn.onclick = () => { mOpenCatEditor(null) }
+  header.appendChild(title); header.appendChild(addBtn)
+  body.appendChild(header)
+
+  if (!cats.length) {
+    body.appendChild(_el('div',{style:{textAlign:'center',padding:'40px 20px',color:'var(--light)',fontSize:13,fontStyle:'italic'}},
+      'No cats added yet. Tap + Add cat or import kennel card PDFs from Find a Match → Cat Roster.'))
+    return
+  }
+
+  const grid = _el('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10}})
+  cats.forEach((cat, i) => {
+    const d = {...(cat.extracted||{}), ...(cat.overrides||{})}
+    const color = COLORS[i % COLORS.length]
+    const pers = (d.personality||[]).slice(0,1).map(p=>PERS_LBL[p]||p.replace(/_/g,' ')).join(', ')
+    const tags = [
+      d.age_category ? `<span style="background:${color}22;color:${color};font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">${AGE_LBL[d.age_category]||d.age_category}</span>` : '',
+      d.sex ? `<span style="background:var(--faint);color:var(--mid);font-size:9px;padding:1px 6px;border-radius:8px">${d.sex}</span>` : '',
+      pers ? `<span style="background:var(--sage-pale);color:var(--sage);font-size:9px;padding:1px 6px;border-radius:8px">${pers}</span>` : '',
+      d.fiv_positive ? `<span style="background:var(--amber-pale);color:var(--amber);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">FIV+</span>` : '',
+      d.bonded ? `<span style="background:#f0eaf8;color:#7a5090;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">Bonded</span>` : '',
+    ].filter(Boolean).join('')
+
+    const card = _el('div',{style:{background:'var(--warm-white)',border:'1.5px solid var(--sand-light)',borderRadius:11,padding:'11px 10px',textAlign:'center',cursor:'pointer',transition:'all .15s',borderLeft:`3px solid ${color}`}})
+    card.innerHTML = `
+      <div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:1rem;margin:0 auto 7px">🐱</div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:5px">${cat.name}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center">${tags}</div>
+      ${d.michi_notes ? `<div style="margin-top:6px;font-size:10px;color:var(--mid);font-style:italic;line-height:1.4;text-align:left;border-top:1px solid var(--faint);padding-top:5px">${d.michi_notes.slice(0,60)}${d.michi_notes.length>60?'…':''}</div>` : ''}
+    `
+    card.onclick = () => { mOpenCatEditor(cat.id) }
+    card.addEventListener('mouseenter', () => { card.style.borderColor = color; card.style.transform = 'translateY(-1px)' })
+    card.addEventListener('mouseleave', () => { card.style.borderColor = 'var(--sand-light)'; card.style.borderLeft = `3px solid ${color}`; card.style.transform = '' })
+    grid.appendChild(card)
+  })
+  body.appendChild(grid)
+
+  // Note about matcher
+  const note = _el('div',{style:{marginTop:16,padding:'10px 12px',background:'var(--amber-pale)',border:'1px solid #e8d898',borderRadius:9,fontSize:11.5,color:'#7a5010',lineHeight:1.6}},
+    '💡 To import cats from kennel card PDFs, go to any adoption appointment and tap Find a Match → Cat Roster tab → drop PDF zone.')
+  body.appendChild(note)
+}
+
+// ═══════════════════════════════════════════════════
 // ADOPTIONS TAB
 // ═══════════════════════════════════════════════════
 
@@ -2123,47 +2182,57 @@ function renderAdoptionsTab(){
     const events   = loadEvents()
     const today    = todayDateStr()
     const isAdopt  = _apptTab === 'adoptions'
+    const isIncoming = _apptTab === 'incoming'
 
-    const todayAdoptions   = events.filter(e=>e.date===today&&e.type==='adoption').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
-    const todayReturns     = events.filter(e=>e.date===today&&(e.type==='return'||e.type==='move')).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const todayAdoptions   = events.filter(e=>e.date===today&&e.type==='adoption'&&e.status!=='completed'&&e.status!=='noshow').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
+    const todayReturns     = events.filter(e=>e.date===today&&(e.type==='return'||e.type==='move')&&e.status!=='completed').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time))
     const upcomingAdoptions= events.filter(e=>e.date>today&&e.type==='adoption').sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
     const upcomingReturns  = events.filter(e=>e.date>today&&(e.type==='return'||e.type==='move')).sort((a,b)=>a.date.localeCompare(b.date)||_parseTime(a.time)-_parseTime(b.time))
-    const pastAdoptions    = events.filter(e=>e.date<today&&e.type==='adoption').sort((a,b)=>b.date.localeCompare(a.date))
-    const pastReturns      = events.filter(e=>e.date<today&&(e.type==='return'||e.type==='move')).sort((a,b)=>b.date.localeCompare(a.date))
+    const pastAdoptions    = [
+      ...events.filter(e=>e.date===today&&e.type==='adoption'&&(e.status==='completed'||e.status==='noshow')).sort((a,b)=>_parseTime(a.time)-_parseTime(b.time)),
+      ...events.filter(e=>e.date<today&&e.type==='adoption').sort((a,b)=>b.date.localeCompare(a.date))
+    ]
+    const pastReturns      = [
+      ...events.filter(e=>e.date===today&&(e.type==='return'||e.type==='move')&&e.status==='completed').sort((a,b)=>_parseTime(a.time)-_parseTime(b.time)),
+      ...events.filter(e=>e.date<today&&(e.type==='return'||e.type==='move')).sort((a,b)=>b.date.localeCompare(a.date))
+    ]
+    // Day notes — all dates
+    const dayNotes = events.filter(e=>e.type==='note').sort((a,b)=>b.date.localeCompare(a.date)||_parseTime(a.time)-_parseTime(b.time))
 
     const todayList    = isAdopt ? todayAdoptions    : todayReturns
     const upcomingList = isAdopt ? upcomingAdoptions : upcomingReturns
     const pastList     = isAdopt ? pastAdoptions     : pastReturns
 
-    const accentColor  = _apptTab === 'shadow' ? '#5a7a9a' : isAdopt ? '#7a5090' : '#b05070'
-    const accentBorder = _apptTab === 'shadow' ? '#a8c0d8' : isAdopt ? '#c8aae0' : '#e8b4c4'
-    // Keep status bar / notification area in sync with the active sub-tab color
-    setThemeColor(accentColor)
+    // All tabs use the same terra color — consistent with Duties/Meds
+    const ADOPT_COLOR = '#7a5090'
+    const INCOMING_COLOR = '#b05070'
+    const NOTES_COLOR = '#7a6020'
+    const headerColor = '#7a5090'
+    setThemeColor(headerColor)
 
-    // ── Header — exact .duties-header class ──────────────────
+    // ── Header — matches Duties/Meds pattern exactly ──────────
     const hdr = document.createElement('div')
     hdr.className = 'duties-header'
-    hdr.style.background = accentColor
-    hdr.style.boxShadow = `0 2px 12px ${accentColor}55`
+    hdr.style.background = headerColor
+    hdr.style.boxShadow = `0 2px 12px rgba(122,80,144,0.35)`
     hdr.innerHTML = `
       <div class="duties-header-top">
-        <span style="font-size:26px;line-height:1">${_apptTab==='shadow'?'📝':'🐾'}</span>
+        <span style="font-size:26px;line-height:1">🐾</span>
         <div style="flex:1;min-width:0">
-          <div class="duties-title">${_apptTab==='shadow'?'Observation Notes':'Adoptions &amp; Returns'}</div>
+          <div class="duties-title">Adoptions</div>
           <div class="duties-sub" id="gs-sync-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
         </div>
-        <button id="gs-sync-btn" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap">🔗 Google</button>
+        <button id="gs-sync-btn" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap">🔗 Sync</button>
         <button onclick="showPrintSheet()" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);color:white;border-radius:20px;padding:5px 11px;font-size:15px;cursor:pointer;font-family:inherit;flex-shrink:0">🖨️</button>
       </div>
       <div class="d-tabs">
         <button class="d-tab-btn${_apptTab==='adoptions'?' active':''}" onclick="_apptTab='adoptions';_expandedEvent=null;renderAdoptionsTab()">🐾 Adoptions</button>
-        <button class="d-tab-btn${_apptTab==='returns'?' active':''}" onclick="_apptTab='returns';_expandedEvent=null;renderAdoptionsTab()">↩ Returns</button>
+        <button class="d-tab-btn${_apptTab==='incoming'?' active':''}" onclick="_apptTab='incoming';_expandedEvent=null;renderAdoptionsTab()">↩ Incoming</button>
+        <button class="d-tab-btn${_apptTab==='daynotes'?' active':''}" onclick="_apptTab='daynotes';_expandedEvent=null;renderAdoptionsTab()">📋 Day Notes</button>
+        <button class="d-tab-btn${_apptTab==='roster'?' active':''}" onclick="_apptTab='roster';renderAdoptionsTab()">🐱 Cat Roster</button>
         <button class="d-tab-btn${_apptTab==='shadow'?' active':''}" onclick="_apptTab='shadow';renderAdoptionsTab()">📝 My Notes</button>
       </div>`
-    // Fix active color since header isn't terra
-    hdr.querySelectorAll('.d-tab-btn.active').forEach(btn => {
-      btn.style.color = _apptTab === 'shadow' ? '#5a7a9a' : accentColor
-    })
+    hdr.querySelectorAll('.d-tab-btn.active').forEach(btn => { btn.style.color = headerColor })
     root.appendChild(hdr)
     setTimeout(() => { _gsUpdateUI(); _gsBindDisconnect() }, 50)
 
@@ -2172,9 +2241,46 @@ function renderAdoptionsTab(){
     body.style.paddingBottom = '88px'
     root.appendChild(body)
 
-    // ── Shadow / My Notes tab ─────────────────────────────────
+    // ── My Notes tab ──────────────────────────────────────────
     if (_apptTab === 'shadow') {
-      renderShadowNotesTab(body, accentColor)
+      renderShadowNotesTab(body, headerColor)
+      if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
+      return
+    }
+
+    // ── Cat Roster tab ────────────────────────────────────────
+    if (_apptTab === 'roster') {
+      renderCatRosterTab(body, headerColor)
+      if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
+      return
+    }
+
+    // ── Day Notes tab ─────────────────────────────────────────
+    if (_apptTab === 'daynotes') {
+      const todayNotes = dayNotes.filter(n => n.date === today)
+      const pastNotes  = dayNotes.filter(n => n.date !== today)
+      const addNoteBtn = document.createElement('button')
+      addNoteBtn.style.cssText = `background:${headerColor};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:16px`
+      addNoteBtn.textContent = '+ Add Day Note'
+      addNoteBtn.onclick = () => showEventForm(body, events, 'note', renderAdoptionsTab)
+      body.appendChild(addNoteBtn)
+
+      const renderNoteList = (list, label) => {
+        if (!list.length) return
+        const sl = document.createElement('div')
+        sl.className = 'section-label amber'
+        sl.textContent = label
+        body.appendChild(sl)
+        const wrap = document.createElement('div')
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:20px'
+        list.forEach(n => wrap.appendChild(renderEventCard(n, events, renderAdoptionsTab)))
+        body.appendChild(wrap)
+      }
+      renderNoteList(todayNotes, 'Today')
+      renderNoteList(pastNotes.slice(0,20), 'Previous')
+      if (!todayNotes.length && !pastNotes.length) {
+        body.innerHTML += `<div style="text-align:center;padding:40px;color:var(--light);font-style:italic;font-size:13px">No day notes yet</div>`
+      }
       if (scrollEl && savedScroll > 0) requestAnimationFrame(() => { scrollEl.scrollTop = savedScroll })
       return
     }
@@ -2184,35 +2290,19 @@ function renderAdoptionsTab(){
     btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-bottom:18px'
     if (isAdopt) {
       const csvBtn = document.createElement('button')
-      csvBtn.style.cssText = `background:var(--warm-white);color:${accentColor};border:1.5px solid ${accentBorder};border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit`
+      csvBtn.style.cssText = `background:var(--warm-white);color:${headerColor};border:1.5px solid #c8aae0;border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit`
       csvBtn.textContent = '📄 Import CSV'
       csvBtn.onclick = () => showCsvImport(body, events, renderAdoptionsTab)
       btnRow.appendChild(csvBtn)
     }
     const addBtn = document.createElement('button')
-    addBtn.style.cssText = `background:${accentColor};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit`
-    addBtn.textContent = isAdopt ? '+ Add Adoption' : '+ Log Return'
+    addBtn.style.cssText = `background:${isAdopt?headerColor:INCOMING_COLOR};color:white;border:none;border-radius:10px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit`
+    addBtn.textContent = isAdopt ? '+ Add Adoption' : '+ Log Incoming'
     addBtn.onclick = () => showEventForm(body, events, isAdopt?'adoption':'return', renderAdoptionsTab)
     btnRow.appendChild(addBtn)
     body.appendChild(btnRow)
 
     // ── Today section ─────────────────────────────────────────
-    // Show any day notes at the top as context (not as appointment cards)
-    const todayNotesInTab = events.filter(e => e.date === today && e.type === 'note')
-    if (todayNotesInTab.length && isAdopt) {
-      const notesStrip = document.createElement('div')
-      notesStrip.style.cssText = 'background:#fdf6e0;border:1.5px solid #e8d898;border-radius:10px;padding:8px 12px;margin-bottom:14px;'
-      notesStrip.innerHTML = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a6020;margin-bottom:5px;">📋 Day notes (not appointments)</div>` +
-        todayNotesInTab.map(n =>
-          `<div style="font-size:12px;color:#5a4820;padding:3px 0;display:flex;align-items:flex-start;gap:6px;border-bottom:1px solid #f0e0a8">
-            ${n.time ? `<span style="font-weight:600;flex-shrink:0">${n.time}</span>` : ''}
-            <span>${n.adopterName}${n.notes ? ` <span style="color:#8a7040;font-style:italic">· ${n.notes}</span>` : ''}</span>
-            <button onclick="event.stopPropagation();(()=>{const evts=loadEvents().map(x=>x.id==='${n.id}'?{...x,type:'adoption'}:x);saveEvents(evts);renderAdoptionsTab()})()" style="margin-left:auto;background:none;border:1px solid #d0c090;border-radius:5px;padding:1px 7px;font-size:10px;color:#7a6020;cursor:pointer;font-family:inherit;flex-shrink:0">→ Adoption</button>
-          </div>`
-        ).join('')
-      body.appendChild(notesStrip)
-    }
-
     const sl1 = document.createElement('div')
     sl1.className = `section-label ${isAdopt?'purple':'rose'}`
     sl1.textContent = `Today — ${todayList.length ? todayList.length+' appointment'+(todayList.length!==1?'s':'') : 'none scheduled'}`
@@ -2222,7 +2312,7 @@ function renderAdoptionsTab(){
       const empty = document.createElement('div')
       empty.className = 'task-card'
       empty.style.marginBottom = '18px'
-      empty.innerHTML = `<div class="task-body" style="padding-left:8px;text-align:center;color:var(--light);font-style:italic;font-size:13px">${isAdopt?'No adoptions today':'No returns or moves today'}</div>`
+      empty.innerHTML = `<div class="task-body" style="padding-left:8px;text-align:center;color:var(--light);font-style:italic;font-size:13px">${isAdopt?'No adoptions today':'No incoming cats today'}</div>`
       body.appendChild(empty)
     } else {
       const list = document.createElement('div')
@@ -2845,34 +2935,48 @@ function showCsvImport(container, events, rerender) {
 }
 
 
-function showEventForm(container,events,type,rerender){
+function showEventForm(container,events,type,rerender,editEv){
   const existing=document.getElementById('add-event-form')
   if(existing){existing.remove();return}
   const isReturn=type==='return'
+  const isEdit=!!editEv
   const color=isReturn?'#b05070':'#7a5090'
   const pale=isReturn?'#fdf0f3':'#f5f0fa'
   const bdr=isReturn?'#e8b4c4':'#c8aae0'
   const cats=(()=>{try{return JSON.parse(localStorage.getItem('shelter_cats')||'[]').map(c=>c.name)}catch{return []}})()
-  const selectedCats=new Set()
+  const selectedCats=new Set(editEv?.cats||[])
 
   const form=_el('div',{id:'add-event-form',style:{background:'white',border:`1.5px solid ${bdr}`,
     borderRadius:14,padding:'16px',marginBottom:12}})
 
-  const makeInput=(type2,placeholder,mb)=>_el('input',{type:type2,placeholder,style:{
-    width:'100%',padding:'9px 12px',border:'1.5px solid #e8ddd0',borderRadius:9,
-    fontSize:13,fontFamily:'inherit',marginBottom:mb||8,outline:'none',boxSizing:'border-box'}})
+  const makeInput=(type2,placeholder,mb)=>{
+    const inp=_el('input',{type:type2,placeholder,style:{
+      width:'100%',padding:'9px 12px',border:'1.5px solid #e8ddd0',borderRadius:9,
+      fontSize:13,fontFamily:'inherit',marginBottom:mb||8,outline:'none',boxSizing:'border-box'}})
+    return inp
+  }
 
   const nameInp=makeInput('text','Adopter name')
+  nameInp.value=editEv?.adopterName||''
   const timeInp=makeInput('time','')
-  const nowH=new Date().getHours()
-  timeInp.value=`${String(nowH).padStart(2,'0')}:00`
+  // Convert display time back to HH:MM for input
+  if(editEv?.time){
+    const tm=editEv.time.match(/(\d+):(\d+)\s*(AM|PM)/i)
+    if(tm){let h=parseInt(tm[1]),m=tm[2],ap=tm[3].toUpperCase();if(ap==='PM'&&h<12)h+=12;if(ap==='AM'&&h===12)h=0;timeInp.value=`${String(h).padStart(2,'0')}:${m}`}
+  } else {
+    const nowH=new Date().getHours()
+    timeInp.value=`${String(nowH).padStart(2,'0')}:00`
+  }
   const dateInp=makeInput('date','')
-  dateInp.value=todayDateStr()
+  dateInp.value=editEv?.date||todayDateStr()
   const notesInp=makeInput('text',isReturn?'Reason for return (optional)':'Notes (e.g. bonded pair)')
+  notesInp.value=editEv?.notes||''
 
   const catRow=_el('div',{style:{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}})
   cats.forEach(name=>{
-    const btn=_el('button',{style:{border:'1.5px solid #e8ddd0',background:'white',color:'#7a6e65',
+    const active=selectedCats.has(name)
+    const btn=_el('button',{style:{border:`1.5px solid ${active?bdr:'#e8ddd0'}`,
+      background:active?pale:'white',color:active?color:'#7a6e65',
       borderRadius:8,padding:'4px 11px',fontSize:12,cursor:'pointer',fontFamily:'inherit'},
       onclick:()=>{
         if(selectedCats.has(name)){selectedCats.delete(name);btn.style.background='white';btn.style.color='#7a6e65';btn.style.borderColor='#e8ddd0'}
@@ -2881,6 +2985,12 @@ function showEventForm(container,events,type,rerender){
     catRow.appendChild(btn)
   })
   const catManual=makeInput('text','Or type cat name(s)','12')
+  // Pre-fill manual cats not in the roster
+  if(editEv?.cats){
+    const rosterNames=new Set(cats.map(c=>c.toLowerCase()))
+    const manualOnly=editEv.cats.filter(c=>!rosterNames.has(c.toLowerCase()))
+    if(manualOnly.length) catManual.value=manualOnly.join(', ')
+  }
 
   const saveBtn=_el('button',{style:{background:color,color:'white',border:'none',borderRadius:9,
     padding:'10px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',flex:1},
@@ -2889,16 +2999,28 @@ function showEventForm(container,events,type,rerender){
       const tval=timeInp.value
       const tDisp=tval?(()=>{const[h,m]=tval.split(':').map(Number);const ampm=h>=12?'PM':'AM',hh=h%12||12;return `${hh}:${String(m).padStart(2,'0')} ${ampm}`})():''
       const manualCats=catManual.value.split(',').map(s=>s.trim()).filter(Boolean)
-      saveEvents([...events,{id:_uid(),type,adopterName:name,time:tDisp,date:dateInp.value,
-        cats:[...selectedCats,...manualCats],notes:notesInp.value.trim(),status:'scheduled',checklist:{}}])
+      const updated={
+        id:editEv?.id||_uid(), type:editEv?.type||type,
+        adopterName:name, time:tDisp, date:dateInp.value,
+        cats:[...selectedCats,...manualCats],
+        notes:notesInp.value.trim(),
+        status:editEv?.status||'scheduled',
+        checklist:editEv?.checklist||{},
+        importedFrom:editEv?.importedFrom
+      }
+      if(isEdit){
+        saveEvents(events.map(e=>e.id===editEv.id?updated:e))
+      } else {
+        saveEvents([...events,updated])
+      }
       form.remove();rerender()
-    }},isReturn?'Log Return':'Save Appointment')
+    }},isEdit?'Save changes':isReturn?'Log Return':'Save Appointment')
   const cancelBtn=_el('button',{style:{background:'transparent',border:'1.5px solid #e8ddd0',color:'#7a6e65',
     borderRadius:9,padding:'10px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit'},
     onclick:()=>form.remove()},'Cancel')
 
   form.appendChild(_el('div',{style:{fontWeight:800,fontSize:13,marginBottom:12,color:color}},
-    isReturn?'↩ Log a Return':'➕ New Adoption Appointment'))
+    isEdit?'✎ Edit appointment':isReturn?'↩ Log a Return':'➕ New Adoption Appointment'))
   form.appendChild(nameInp);form.appendChild(timeInp);form.appendChild(dateInp)
   form.appendChild(notesInp)
   if(cats.length>0)form.appendChild(catRow)
