@@ -219,7 +219,10 @@ body {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0;
   width: 3px; background: var(--faint); transition: background 0.2s;
 }
+.task-card:active { background: var(--cream); transform: scale(0.99); }
 .task-card.done { opacity: 0.55; }
+.task-card.done:active { opacity: 0.45; }.task-card.done:active { opacity: 0.45; }
+
 .task-card.done::before { background: var(--sage); }
 .task-card.done .task-name { text-decoration: line-through; color: var(--mid); }
 .task-checkbox {
@@ -466,6 +469,7 @@ body {
   border-color: #5a9a6a;
   color: #3a7050;
 }
+.cage-check-btn:active { opacity: 0.75; transform: scale(0.97); }
 .cage-check-btn .cbox {
   width: 14px; height: 14px;
   border-radius: 3px;
@@ -1286,15 +1290,18 @@ function _sheetsJsonToCsv(json) {
 }
 
 // ── Event type classifier ─────────────────────────────────────────
-// Returns true if a name/note string looks like a day-level note
-// rather than an actual adopter appointment
+// Returns true if a name string looks like a day-level note
+// rather than an actual adopter appointment.
+// IMPORTANT: only checks the name column — arrivedNote/staffNote can
+// legitimately contain words like "foster", "surgery", "transfer" for
+// real adopters (e.g. "has foster cat at home", "cat had surgery").
 function _isLikelyNote(name, arrivedNote, staffNote) {
-  const all = [name, arrivedNote, staffNote].join(' ').toLowerCase()
-  // Explicit day-level keywords
-  if (/\b(intake|transport|vet\s|closed|staff|volunteer|meeting|holiday|training|surgery|foster|transfer|no\s*appts?|lobby|coverage|out\s*of\s*office|day\s*off|inspect|audit|event)\b/.test(all)) return true
-  // All-caps name with no lowercase letters is likely a label, not a person
+  const n = name.toLowerCase().trim()
+  // Explicit day-level keywords in the NAME column only
+  if (/\b(intake|transport|vet\s|closed|staff|volunteer|meeting|holiday|training|surgery|foster\s|foster$|no\s*appts?|lobby|coverage|out\s*of\s*office|day\s*off|inspect|audit)\b/.test(n)) return true
+  // All-caps entry (e.g. "INTAKE DAY", "LOBBY CLOSED") — not a person's name
   if (/^[A-Z][A-Z\s\-\/&]+$/.test(name.trim()) && name.trim().length > 4) return true
-  // Contains a dash + single word (e.g. "Amanda - coverage", "Monica - AM only")
+  // "Staff Name - role" pattern (e.g. "Amanda - coverage", "Monica - AM only")
   if (/^[A-Z][a-z]+ [-–] [a-z]/i.test(name.trim())) return true
   return false
 }
@@ -5913,17 +5920,29 @@ let mEditingCatId = null
 let mActiveApptId = null
 let mExtractedProfile = null
 
-// ── Open / close ──────────────────────────────────────────────
+function mClose() {
+  document.getElementById('matcherOverlay').classList.remove('m-open')
+  // Restore history state pushed when matcher opened
+  if (history.state && history.state.matcher) history.back()
+}
+
+// Push a history entry when matcher opens so Android back closes it
 function mOpenMatcher(ev) {
   document.getElementById('matcherOverlay').classList.add('m-open')
+  history.pushState({ matcher: true }, '')
   mRenderApptList()
   mLoadAppt(ev)
   mRenderRoster()
   mSwitchTab('adopter')
 }
-function mClose() {
-  document.getElementById('matcherOverlay').classList.remove('m-open')
-}
+
+// Handle Android back button
+window.addEventListener('popstate', function(e) {
+  const overlay = document.getElementById('matcherOverlay')
+  if (overlay && overlay.classList.contains('m-open')) {
+    overlay.classList.remove('m-open')
+  }
+})
 
 // ── Populate appointment sidebar ──────────────────────────────
 function mRenderApptList() {
