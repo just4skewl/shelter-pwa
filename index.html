@@ -6509,11 +6509,43 @@ async function mProcessPDFs(files, statusEl, onDone) {
   const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'))
   if (!pdfs.length) { alert('Please select PDF files'); return }
   const status = statusEl || document.getElementById('mImportStatus')
-  if (status) { status.style.display = 'block'; status.textContent = `Processing ${pdfs.length} PDF${pdfs.length>1?'s':''}…` }
+
+  const showStatus = (msg, color) => {
+    if (!status) return
+    status.style.display = 'block'
+    status.style.color = color || 'var(--mid)'
+    status.textContent = msg
+  }
+
+  // ── Step 1: Warm the proxy first if it hasn't been confirmed ready ──
+  if (_proxyState !== 'ok') {
+    showStatus('⏳ Waking up AI… please wait (~30s)', '#c98a2a')
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('timeout')), 35000)
+        const poll = setInterval(() => {
+          fetch(PROXY_URL + '/health', { method: 'GET' })
+            .then(r => { if (r.ok) { clearInterval(poll); clearTimeout(timeout); _setProxyState('ok'); resolve() } })
+            .catch(() => {}) // keep polling
+        }, 2000)
+        // First immediate check
+        fetch(PROXY_URL + '/health', { method: 'GET' })
+          .then(r => { if (r.ok) { clearInterval(poll); clearTimeout(timeout); _setProxyState('ok'); resolve() } })
+          .catch(() => {})
+      })
+      showStatus('✓ AI ready — reading PDF…', '#6a9170')
+    } catch(e) {
+      showStatus('⚠ AI is still waking up. Wait 10 seconds and tap the drop zone again.', '#c97b5a')
+      return
+    }
+  } else {
+    showStatus(`Reading PDF — this may take 20–30 seconds for a full kennel card export…`, '#c98a2a')
+  }
 
   let imported = 0
   let skipped = 0
   for (const file of pdfs) {
+    showStatus(`Reading ${file.name}… (${Math.round(file.size/1024)}KB — please wait)`, '#c98a2a')
     try {
       const base64 = await mFileToBase64(file)
       const today = new Date()
@@ -6595,39 +6627,49 @@ Important:
           {type:'text',text:prompt}
         ]}]
       })
+
+      // Detect proxy/API error responses
+      if (data.error || data.type === 'error') {
+        const errMsg = data.error?.message || data.message || JSON.stringify(data.error || data)
+        throw new Error(errMsg)
+      }
+
       const raw = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('')
+      if (!raw) throw new Error('Empty response — the request may have timed out. Try again.')
+
       const jm = raw.replace(/```json|```/g,'').match(/\{[\s\S]*\}/)
-      if (jm) {
-        const result = JSON.parse(jm[0])
-        const catsFromFile = result.cats || []
-        for (const extracted of catsFromFile) {
-          const catName = (extracted.name || '').trim()
-          if (!catName || catName.toLowerCase().includes('unknown')) continue
-          const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
-          if (alreadyExists) {
-            skipped++
-          } else {
-            mCats.push({ id: Date.now().toString() + Math.random(), name: catName, extracted, overrides: {} })
-            imported++
-          }
+      if (!jm) throw new Error('Could not parse response. Try uploading a smaller portion of the PDF.')
+
+      const result = JSON.parse(jm[0])
+      const catsFromFile = result.cats || []
+
+      if (!catsFromFile.length) {
+        showStatus('⚠ No cats found in the PDF. Make sure it is a Shelterluv kennel card export.', '#c97b5a')
+        return
+      }
+
+      for (const extracted of catsFromFile) {
+        const catName = (extracted.name || '').trim()
+        if (!catName || catName.toLowerCase().includes('unknown')) continue
+        const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
+        if (alreadyExists) { skipped++ } else {
+          mCats.push({ id: Date.now().toString() + Math.random(), name: catName, extracted, overrides: {} })
+          imported++
         }
       }
     } catch(e) {
       console.warn('PDF extraction failed:', file.name, e.message)
-      if (status) {
-        status.style.color = '#c97b5a'
-        status.textContent = `⚠ Could not read ${file.name} — check your connection and try again`
-      }
+      showStatus(`⚠ ${e.message || 'Import failed'} — try again or split the PDF into smaller batches (5 pages each).`, '#c97b5a')
+      return
     }
   }
+
   mRenderRoster()
-  if (status) {
-    const msg = skipped > 0
-      ? `✓ Added ${imported} cat${imported!==1?'s':''} · ${skipped} already on roster (skipped)`
-      : `✓ Imported ${imported} cat${imported!==1?'s':''}`
-    status.textContent = msg
-    setTimeout(() => { status.style.display = 'none' }, 4000)
-  }
+  const msg = skipped > 0
+    ? `✓ Added ${imported} cat${imported!==1?'s':''} · ${skipped} already on roster (skipped)`
+    : `✓ Added ${imported} cat${imported!==1?'s':''} — tap any card to review`
+  showStatus(msg, '#6a9170')
+  setTimeout(() => { if (status) status.style.display = 'none' }, 5000)
   if (onDone) onDone(imported)
 }
 
