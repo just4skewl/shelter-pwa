@@ -1735,6 +1735,7 @@ function _el(tag,attrs,...children){
   const e=document.createElement(tag)
   Object.entries(attrs||{}).forEach(([k,v])=>{
     if(k==='style'&&typeof v==='object')Object.assign(e.style,v)
+    else if(k==='className')e.className=v
     else if(k.startsWith('on'))e.addEventListener(k.slice(2).toLowerCase(),v)
     else e.setAttribute(k,v)
   })
@@ -6613,6 +6614,10 @@ Important:
       }
     } catch(e) {
       console.warn('PDF extraction failed:', file.name, e.message)
+      if (status) {
+        status.style.color = '#c97b5a'
+        status.textContent = `⚠ Could not read ${file.name} — check your connection and try again`
+      }
     }
   }
   mRenderRoster()
@@ -6838,6 +6843,7 @@ function mSaveCat() {
   }
   mRenderRoster()
   mCloseCatEditor()
+  _refreshRosterTabIfVisible()
 }
 
 function mDeleteCat() {
@@ -6845,6 +6851,22 @@ function mDeleteCat() {
   mCats = mCats.filter(c => c.id !== mEditingCatId)
   mRenderRoster()
   mCloseCatEditor()
+  _refreshRosterTabIfVisible()
+}
+
+// Refreshes the roster tab's visible grid if it's currently showing
+function _refreshRosterTabIfVisible() {
+  const body = document.querySelector('#section-adoptions .duties-body')
+  if (!body) return
+  const existingGrid = body.querySelector('.roster-cat-grid')
+  const existingEmpty = body.querySelector('.roster-empty')
+  if (!existingGrid && !existingEmpty) return // roster tab not currently rendered
+  if (existingGrid) existingGrid.remove()
+  if (existingEmpty) existingEmpty.remove()
+  renderRosterGrid(body, '#7a5090')
+  // Update the count label
+  const countEl = body.querySelector('[data-roster-count]')
+  if (countEl) countEl.textContent = `${mCats.length} cat${mCats.length!==1?'s':''} at JCAC`
 }
 
 // ── Chip events inside editor modal ──────────────────────────
