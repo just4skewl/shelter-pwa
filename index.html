@@ -6517,35 +6517,18 @@ async function mProcessPDFs(files, statusEl, onDone) {
     status.textContent = msg
   }
 
-  // ── Step 1: Warm the proxy first if it hasn't been confirmed ready ──
-  if (_proxyState !== 'ok') {
-    showStatus('⏳ Waking up AI… please wait (~30s)', '#c98a2a')
-    try {
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('timeout')), 35000)
-        const poll = setInterval(() => {
-          fetch(PROXY_URL + '/health', { method: 'GET' })
-            .then(r => { if (r.ok) { clearInterval(poll); clearTimeout(timeout); _setProxyState('ok'); resolve() } })
-            .catch(() => {}) // keep polling
-        }, 2000)
-        // First immediate check
-        fetch(PROXY_URL + '/health', { method: 'GET' })
-          .then(r => { if (r.ok) { clearInterval(poll); clearTimeout(timeout); _setProxyState('ok'); resolve() } })
-          .catch(() => {})
-      })
-      showStatus('✓ AI ready — reading PDF…', '#6a9170')
-    } catch(e) {
-      showStatus('⚠ AI is still waking up. Wait 10 seconds and tap the drop zone again.', '#c97b5a')
-      return
-    }
-  } else {
-    showStatus(`Reading PDF — this may take 20–30 seconds for a full kennel card export…`, '#c98a2a')
-  }
-
   let imported = 0
   let skipped = 0
+
   for (const file of pdfs) {
-    showStatus(`Reading ${file.name}… (${Math.round(file.size/1024)}KB — please wait)`, '#c98a2a')
+    // Live countdown so user knows it's working (not frozen)
+    let elapsed = 0
+    showStatus(`Reading PDF — AI processing… 0s`, '#c98a2a')
+    const countdownTimer = setInterval(() => {
+      elapsed++
+      showStatus(`Reading PDF — AI processing… ${elapsed}s (large exports take 30–60s)`, '#c98a2a')
+    }, 1000)
+
     try {
       const base64 = await mFileToBase64(file)
       const today = new Date()
@@ -6562,104 +6545,86 @@ The format on each card is:
 
 For age_category, calculate from Date of Birth:
 - Under 6 months → "kitten"
-- 6 months to 2 years → "young_adult"  
+- 6 months to 2 years → "young_adult"
 - 2 to 8 years → "adult"
 - Over 8 years → "senior"
 Today's date is ${today.toISOString().slice(0,10)}.
 
-For affection, energy, playfulness — infer from the "About Me" bio text. Look for clues:
+For affection, energy, playfulness — infer from the "About Me" bio text:
 - "loves cuddles", "lap cat", "affectionate" → very_affectionate
 - "shy", "reserved", "takes time" → warms_up or shy
 - "energetic", "playful", "loves to play" → high energy / very_playful
 - "calm", "relaxed", "laid back" → low energy
 
 For color, choose the closest match from: orange|black|grey|tabby|tuxedo|white|calico|other
-- Use the card's exact Color and Pattern fields to decide
-- If it doesn't clearly fit one of the above, use "other"
-- Store the exact color description from the card in color_detail regardless
+Use the card's exact Color and Pattern fields. Store the exact description in color_detail.
 
 Return ONLY valid JSON — no explanation, no markdown:
-{
-  "cats": [
-    {
-      "name": "primary name only, no fka or animal ID",
-      "sex": "male or female",
-      "age_text": "date of birth as written, e.g. 04/19/2022",
-      "age_category": "kitten|young_adult|adult|senior",
-      "coat": "short|medium|long",
-      "color": "orange|black|grey|tabby|tuxedo|white|calico|other",
-      "color_detail": "exact color/pattern as written on card",
-      "breed": "breed as written",
-      "energy": "low|medium|high",
-      "energy_conf": "high|med|low",
-      "affection": "very_affectionate|affectionate_terms|warms_up|shy|very_shy|independent",
-      "affection_conf": "high|med|low",
-      "affection_note": "any nuance from the bio about how they like to be touched or held",
-      "playfulness": "very_playful|moderate|low",
-      "playfulness_conf": "high|med|low",
-      "vocal": "chatty|moderate|quiet",
-      "kids": "yes|older_only|unknown|no",
-      "dogs": "dog_friendly|tolerates|unknown|no_dogs",
-      "cat_compat": "loves_all|selective|tolerates|no_cats|unknown_cats",
-      "cat_compat_notes": "bonded partner name if bonded, or any cat compatibility notes from bio",
-      "fiv_positive": false,
-      "felv_positive": false,
-      "bonded": false,
-      "bonded_partner": "name of bonded partner if mentioned",
-      "tripod": false,
-      "blind": false,
-      "special_needs": "",
-      "bio_text": "full About Me text verbatim",
-      "confidence_overall": "high|med|low"
-    }
-  ]
-}
+{"cats":[{"name":"primary name only","sex":"male or female","age_text":"DOB as written","age_category":"kitten|young_adult|adult|senior","coat":"short|medium|long","color":"orange|black|grey|tabby|tuxedo|white|calico|other","color_detail":"exact color/pattern","breed":"breed as written","energy":"low|medium|high","energy_conf":"high|med|low","affection":"very_affectionate|affectionate_terms|warms_up|shy|very_shy|independent","affection_conf":"high|med|low","affection_note":"nuance from bio","playfulness":"very_playful|moderate|low","vocal":"chatty|moderate|quiet","kids":"yes|older_only|unknown|no","dogs":"dog_friendly|tolerates|unknown|no_dogs","cat_compat":"loves_all|selective|tolerates|no_cats|unknown_cats","cat_compat_notes":"bonded partner or compat notes","fiv_positive":false,"felv_positive":false,"bonded":false,"bonded_partner":"","tripod":false,"blind":false,"special_needs":"","bio_text":"full About Me text","confidence_overall":"high|med|low"}]}
 
-Important:
-- Include ALL cats — check every single page
-- If a field is not visible, use empty string or false — never skip a cat because info is missing
-- Do NOT use the filename, document title, or "Animal ID" as a cat name`
+Include ALL cats. Never skip a cat because info is missing.`
 
-      const data = await _claudeAPI({
-        model:'claude-sonnet-4-6', max_tokens:8000,
-        messages:[{role:'user',content:[
-          {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-          {type:'text',text:prompt}
-        ]}]
+      // Use AbortController for a generous 90-second timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 90000)
+
+      const response = await fetch(PROXY_URL + '/api/claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8000,
+          messages: [{role:'user', content:[
+            {type:'document', source:{type:'base64', media_type:'application/pdf', data:base64}},
+            {type:'text', text:prompt}
+          ]}]
+        })
       })
+      clearTimeout(timeoutId)
+      clearInterval(countdownTimer)
 
-      // Detect proxy/API error responses
+      if (!response.ok) throw new Error(`Server error ${response.status} — try again`)
+
+      const data = await response.json()
+
       if (data.error || data.type === 'error') {
-        const errMsg = data.error?.message || data.message || JSON.stringify(data.error || data)
-        throw new Error(errMsg)
+        throw new Error(data.error?.message || data.message || 'API error — try again')
       }
 
       const raw = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('')
-      if (!raw) throw new Error('Empty response — the request may have timed out. Try again.')
+      if (!raw) throw new Error('Empty response — the AI may have timed out. Try again immediately (it will be faster now).')
 
       const jm = raw.replace(/```json|```/g,'').match(/\{[\s\S]*\}/)
-      if (!jm) throw new Error('Could not parse response. Try uploading a smaller portion of the PDF.')
+      if (!jm) throw new Error('Response could not be parsed. Try splitting the PDF into batches of 5 pages.')
 
       const result = JSON.parse(jm[0])
       const catsFromFile = result.cats || []
 
       if (!catsFromFile.length) {
-        showStatus('⚠ No cats found in the PDF. Make sure it is a Shelterluv kennel card export.', '#c97b5a')
+        clearInterval(countdownTimer)
+        showStatus('⚠ No cats found. Make sure this is a Shelterluv kennel card export PDF.', '#c97b5a')
         return
       }
 
       for (const extracted of catsFromFile) {
         const catName = (extracted.name || '').trim()
-        if (!catName || catName.toLowerCase().includes('unknown')) continue
+        if (!catName || catName.toLowerCase() === 'unknown') continue
         const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
         if (alreadyExists) { skipped++ } else {
           mCats.push({ id: Date.now().toString() + Math.random(), name: catName, extracted, overrides: {} })
           imported++
         }
       }
+
     } catch(e) {
-      console.warn('PDF extraction failed:', file.name, e.message)
-      showStatus(`⚠ ${e.message || 'Import failed'} — try again or split the PDF into smaller batches (5 pages each).`, '#c97b5a')
+      clearInterval(countdownTimer)
+      const msg = e.name === 'AbortError'
+        ? '⚠ Timed out (90s). The PDF may be too large — try uploading 5 pages at a time.'
+        : `⚠ ${e.message}`
+      showStatus(msg, '#c97b5a')
+      // Still save anything successfully imported before the error
+      if (imported > 0) mRenderRoster()
       return
     }
   }
@@ -6667,9 +6632,9 @@ Important:
   mRenderRoster()
   const msg = skipped > 0
     ? `✓ Added ${imported} cat${imported!==1?'s':''} · ${skipped} already on roster (skipped)`
-    : `✓ Added ${imported} cat${imported!==1?'s':''} — tap any card to review`
+    : `✓ Added ${imported} cat${imported!==1?'s':''} — tap any card to review and edit`
   showStatus(msg, '#6a9170')
-  setTimeout(() => { if (status) status.style.display = 'none' }, 5000)
+  setTimeout(() => { if (status) status.style.display = 'none' }, 6000)
   if (onDone) onDone(imported)
 }
 
