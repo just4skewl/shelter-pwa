@@ -29,13 +29,13 @@
 /* ─── RESET & BASE ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --cream: #faf6ef; --warm-white: #fdf9f4;
-  --terra: #c97b5a; --terra-med: #dc9272; --terra-light: #f2d5c4; --terra-pale: #fdf3ef;
+  --cream: #faf6ef; --warm-white: #fdf9f4; --parchment: #f4ede0;
+  --terra: #c97b5a; --terra-med: #dc9272; --terra-light: #f2d5c4; --terra-pale: #fdf3ef; --terra-dark: #a85e3a;
   --sage: #6a9170;  --sage-med: #88aa8e;  --sage-light: #c0d9c4;  --sage-pale: #edf5ef;
   --amber: #c98a2a; --amber-pale: #fdf7e8;
   --sand: #d4bc96;  --sand-light: #e8ddd0; --sand-dark: #bca87a;
   --ink: #3a3530;   --mid: #7a6e65;        --light: #b0a898;       --faint: #e0d8d0;
-  --dusty-rose: #c4847a;
+  --dusty-rose: #c4847a; --purple: #7a5090;
   --white: #ffffff;
   --nav-h: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -1426,19 +1426,22 @@ function _gsAutoImport(csvText) {
       }
 
       if (catMove) {
-        const isReturn = /return|reclaim|surrender/i.test(catMove)
+        const isReturn = /\b(return|reclaim|surrender)\b/i.test(catMove)
+        const isIntake = /\b(intake|transfer in|incoming|arriving|new cat|transport.*to JCAC|coming in)\b/i.test(catMove)
+        // Only create an Incoming event if it's clearly a cat arriving or returning to the shelter
+        // Skip general transport notes, staff movement entries, or vague cat mentions
+        if (!isReturn && !isIntake) return  // skip — not an actual incoming event
+
         const catMatch = catMove.match(/\b([A-Z][a-z]{1,12})\s*(?:\(\d+\))?\s*(?:return|adoption|transfer|,| to )/i)
         const catName  = catMatch ? catMatch[1] : catMove.split(/[\s,]/)[0]
 
-        // Skip if the name column already covers this same cat+type on this row
-        // (prevents double-entry when a return appears in both adopter col and CAT MOVES col)
         const alreadyCovered = name && !noAppts && catName &&
           name.toLowerCase().includes(catName.toLowerCase())
 
         if (!alreadyCovered) {
           built.push({
             id: _uid(), type: isReturn ? 'return' : 'move',
-            adopterName: catName || 'Unknown',
+            adopterName: catName || 'Cat move',
             date: r._date,
             time: timeCol ? _formatTime(r[timeCol]) : '',
             cats: catName ? [catName] : [],
@@ -3103,25 +3106,27 @@ function showCsvImport(container, events, rerender) {
         })
       }
 
-      // ── Case 2: CAT MOVES entry — returns or transfers ──
+      // ── Case 2: CAT MOVES entry — only actual returns or cat intake ──
       if(catMove){
-        const isReturn = /return|reclaim|surrender/i.test(catMove)
-        // Extract cat name — e.g. "Choccy (16824)" or "Lateef"
+        const isReturn = /\b(return|reclaim|surrender)\b/i.test(catMove)
+        const isIntake = /\b(intake|transfer in|incoming|arriving|new cat|transport.*to JCAC|coming in)\b/i.test(catMove)
+        // Only log as Incoming if it's clearly a cat returning or arriving — skip transport/staff notes
+        if(!isReturn && !isIntake){ /* skip */ } else {
         const catMatch = catMove.match(/\b([A-Z][a-z]{1,12})\s*(?:\(\d+\))?\s*(?:return|adoption|transfer|,| to )/i)
         const catName  = catMatch ? catMatch[1] : ''
-        // Parse time from note prefix like "2p:" or "Aft:"
         const tPfx     = catMove.match(/^(\d{1,2}[ap]|aft(?:ernoon)?|morn(?:ing)?|am|pm)\s*:/i)
         const evtTime  = tPfx ? _formatTime(tPfx[1].replace(':','').trim()) : (timeCol?_formatTime(r[timeCol]):'')
         built.push({
           id:_uid(),
           type: isReturn?'return':'move',
-          adopterName: catName?(catName+(isReturn?' — Return':' — Transfer')):(isReturn?'Cat Return':'Cat Transfer'),
+          adopterName: catName?(catName+(isReturn?' — Return':' — Incoming')):(isReturn?'Cat Return':'Cat Incoming'),
           date:r._date,
           time:evtTime,
           cats:catName?[catName]:[],
           notes:catMove,
           status:'scheduled', checklist:{}, importedFrom:'csv'
         })
+        }
       }
 
       // Skip if nothing at all
@@ -6510,73 +6515,104 @@ async function mProcessPDFs(files, statusEl, onDone) {
   for (const file of pdfs) {
     try {
       const base64 = await mFileToBase64(file)
-      const prompt = `This is a cat kennel card from an animal shelter. Extract all information about the cat. Return ONLY valid JSON:
+      const today = new Date()
+      const prompt = `This is a Shelterluv kennel card export PDF from an animal shelter. It contains multiple cat profiles — typically 1–2 cats per page. There may be 10–30+ cats in total.
+
+Extract EVERY cat in the document. For each cat return one object in the array.
+
+The format on each card is:
+- Cat name in bold/colored text at top (may include "fka OldName" — use only the primary current name before any parentheses)
+- Animal ID next to the name
+- Sex, Date of Birth, Breed, Color, Pattern fields
+- "About Me:" section with a personality bio
+- May have attribute tags like "Bonded", "FIV+", "FeLV+" near the top
+
+For age_category, calculate from Date of Birth:
+- Under 6 months → "kitten"
+- 6 months to 2 years → "young_adult"  
+- 2 to 8 years → "adult"
+- Over 8 years → "senior"
+Today's date is ${today.toISOString().slice(0,10)}.
+
+For affection, energy, playfulness — infer from the "About Me" bio text. Look for clues:
+- "loves cuddles", "lap cat", "affectionate" → very_affectionate
+- "shy", "reserved", "takes time" → warms_up or shy
+- "energetic", "playful", "loves to play" → high energy / very_playful
+- "calm", "relaxed", "laid back" → low energy
+
+For color, choose the closest match from: orange|black|grey|tabby|tuxedo|white|calico|other
+- Use the card's exact Color and Pattern fields to decide
+- If it doesn't clearly fit one of the above, use "other"
+- Store the exact color description from the card in color_detail regardless
+
+Return ONLY valid JSON — no explanation, no markdown:
 {
-  "name": "cat name",
-  "sex": "male or female",
-  "age_text": "as written on card",
-  "age_category": "kitten|young_adult|adult|senior",
-  "coat": "short|medium|long",
-  "color": "orange|black|grey|tabby|tuxedo|white|calico|other",
-  "color_detail": "exact color description",
-  "breed": "breed if mentioned",
-  "energy": "low|medium|high",
-  "energy_conf": "high|med|low",
-  "affection": "very_affectionate|affectionate_terms|warms_up|shy|very_shy|independent",
-  "affection_conf": "high|med|low",
-  "affection_note": "any nuance about how they like to be pet, touched, held",
-  "playfulness": "very_playful|moderate|low",
-  "playfulness_conf": "high|med|low",
-  "vocal": "chatty|moderate|quiet",
-  "kids": "yes|older_only|unknown|no",
-  "dogs": "dog_friendly|tolerates|unknown|no_dogs",
-  "cat_compat": "loves_all|selective|tolerates|no_cats|unknown_cats",
-  "cat_compat_notes": "any specifics about cat compatibility",
-  "fiv_positive": false,
-  "felv_positive": false,
-  "bonded": false,
-  "bonded_partner": "",
-  "tripod": false,
-  "blind": false,
-  "special_needs": "",
-  "bio_text": "the full bio/description text",
-  "confidence_overall": "high|med|low"
-}`
+  "cats": [
+    {
+      "name": "primary name only, no fka or animal ID",
+      "sex": "male or female",
+      "age_text": "date of birth as written, e.g. 04/19/2022",
+      "age_category": "kitten|young_adult|adult|senior",
+      "coat": "short|medium|long",
+      "color": "orange|black|grey|tabby|tuxedo|white|calico|other",
+      "color_detail": "exact color/pattern as written on card",
+      "breed": "breed as written",
+      "energy": "low|medium|high",
+      "energy_conf": "high|med|low",
+      "affection": "very_affectionate|affectionate_terms|warms_up|shy|very_shy|independent",
+      "affection_conf": "high|med|low",
+      "affection_note": "any nuance from the bio about how they like to be touched or held",
+      "playfulness": "very_playful|moderate|low",
+      "playfulness_conf": "high|med|low",
+      "vocal": "chatty|moderate|quiet",
+      "kids": "yes|older_only|unknown|no",
+      "dogs": "dog_friendly|tolerates|unknown|no_dogs",
+      "cat_compat": "loves_all|selective|tolerates|no_cats|unknown_cats",
+      "cat_compat_notes": "bonded partner name if bonded, or any cat compatibility notes from bio",
+      "fiv_positive": false,
+      "felv_positive": false,
+      "bonded": false,
+      "bonded_partner": "name of bonded partner if mentioned",
+      "tripod": false,
+      "blind": false,
+      "special_needs": "",
+      "bio_text": "full About Me text verbatim",
+      "confidence_overall": "high|med|low"
+    }
+  ]
+}
+
+Important:
+- Include ALL cats — check every single page
+- If a field is not visible, use empty string or false — never skip a cat because info is missing
+- Do NOT use the filename, document title, or "Animal ID" as a cat name`
+
       const data = await _claudeAPI({
-          model:'claude-sonnet-4-6', max_tokens:1200,
-          messages:[{role:'user',content:[
-            {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-            {type:'text',text:prompt}
-          ]}]
-        })
+        model:'claude-sonnet-4-6', max_tokens:8000,
+        messages:[{role:'user',content:[
+          {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+          {type:'text',text:prompt}
+        ]}]
+      })
       const raw = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('')
       const jm = raw.replace(/```json|```/g,'').match(/\{[\s\S]*\}/)
       if (jm) {
-        const extracted = JSON.parse(jm[0])
-        const catName = (extracted.name || file.name.replace('.pdf','')).trim()
-        // Skip if a cat with the same name already exists (case-insensitive)
-        const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
-        if (alreadyExists) {
-          skipped++
-        } else {
-          mCats.push({
-            id: Date.now().toString() + Math.random(),
-            name: catName,
-            extracted,
-            overrides: {}
-          })
-          imported++
+        const result = JSON.parse(jm[0])
+        const catsFromFile = result.cats || []
+        for (const extracted of catsFromFile) {
+          const catName = (extracted.name || '').trim()
+          if (!catName || catName.toLowerCase().includes('unknown')) continue
+          const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())
+          if (alreadyExists) {
+            skipped++
+          } else {
+            mCats.push({ id: Date.now().toString() + Math.random(), name: catName, extracted, overrides: {} })
+            imported++
+          }
         }
       }
     } catch(e) {
-      const fallbackName = file.name.replace('.pdf','').trim()
-      const alreadyExists = mCats.some(c => c.name.trim().toLowerCase() === fallbackName.toLowerCase())
-      if (!alreadyExists) {
-        mCats.push({ id: Date.now().toString() + Math.random(), name: fallbackName, extracted:{}, overrides:{} })
-        imported++
-      } else {
-        skipped++
-      }
+      console.warn('PDF extraction failed:', file.name, e.message)
     }
   }
   mRenderRoster()
